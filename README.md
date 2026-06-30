@@ -1,1 +1,0 @@
-# EA7LMT_CW_Trainer
