@@ -1,5 +1,5 @@
 // ============================================================
-// PRO MICRO - ESPEJO HID PARA MORSE APP / VBAND
+// PRO MICRO - ESPEJO HID PARA MORSE APP / EA7LMT WEB APP
 // ATmega32U4 - 16MHz - USB-C
 //
 // Convierte un manipulador iambic (jack estéreo 3.5mm) en
