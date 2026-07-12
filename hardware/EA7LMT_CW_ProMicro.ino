@@ -31,7 +31,7 @@
 #define DAH_PIN   8
 
 // --- KEYS ---
-// CW Trainer EA7LMT / vBand / Morse App Android: X / Z
+// CW Trainer EA7LMT / Morse App Android: X / Z
 // Change these if your app needs different keys
 #define KEY_DIT  'x'
 #define KEY_DAH  'z'
