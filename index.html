@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';">
+<meta name="referrer" content="no-referrer">
+<title>CW Trainer - Iambic B / Vertical (EA7LMT)</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0a0d08;
+    color: #39ff14;
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  #mainArea {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    /* padding-bottom is set dynamically in JS to match the actual
+       height of #controls + #paddles, since that height changes
+       whenever the control bar wraps onto a second line. */
+  }
+  #output {
+    flex: 0 0 140px;
+    height: 140px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    font-size: 60px;
+    font-weight: bold;
+    letter-spacing: 1px;
+  }
+  #wordLine {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: flex-end;
+    padding: 14px 16px 10px;
+    font-size: 30px;
+    line-height: 1.5;
+    letter-spacing: 1px;
+    color: #39ff14;
+    word-wrap: break-word;
+    overflow-y: auto;
+    flex-wrap: wrap;
+    align-content: flex-end;
+  }
+  .letter { display:inline; color:#e8d000; white-space: pre; }
+  .letter.current { color:#39ff14; }
+  #output.building {
+    color:#b400e0;
+    font-size: 30px;
+    font-weight: normal;
+  }
+
+  #controls {
+    position: fixed; bottom: 110px; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 10px;
+    background: #0a0d08;
+    border-top: 1px solid #1a2a14;
+    font-size: 13px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .btn {
+    border: 1px solid #39ff14;
+    color: #39ff14;
+    background: transparent;
+    padding: 4px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    user-select: none;
+  }
+  .btn:active { background: rgba(57,255,20,0.2); }
+  .btn:focus { outline: none; }
+  .btn::-moz-focus-inner { border: 0; }
+  .btn.modeBtn {
+    border-color: #b400e0;
+    color: #b400e0;
+  }
+  .btn.modeBtn:active { background: rgba(180,0,224,0.2); }
+  #wpmLabel { color:#39ff14; }
+  .controlGroup {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  #paddles {
+    position: fixed; bottom: 0; left: 0; right: 0; height: 110px;
+    display: flex;
+  }
+  .paddle {
+    flex: 1;
+    border: 2px solid #39ff14;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    color: #1a3a14;
+    font-size: 18px;
+    letter-spacing: 1px;
+    transition: background 0.05s, color 0.05s;
+  }
+  .paddle .key {
+    font-size: 12px;
+    margin-top: 4px;
+    opacity: 0.7;
+  }
+  .paddle.active {
+    background: #173a10;
+    color: #39ff14;
+  }
+  /* Straight-key mode: collapse to a single full-width panel. */
+  #paddles.straight-mode #dahPaddle { display: none; }
+  #paddles.straight-mode #ditPaddle { flex: 1 1 100%; }
+
+  .overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.92);
+    color: #39ff14;
+    padding: 24px;
+    font-size: 16px;
+    line-height: 1.7;
+    overflow-y: auto;
+    z-index: 10;
+  }
+  .overlay h2 { color:#b400e0; }
+  .overlay .closeBtn {
+    margin-top: 20px;
+  }
+
+  .refTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .refTable th {
+    color: #b400e0;
+    text-align: left;
+    padding: 4px 10px;
+    border-bottom: 1px solid #39ff14;
+    position: sticky;
+    top: 0;
+    background: #0a0d08;
+  }
+  .refTable td {
+    padding: 4px 10px;
+    border-bottom: 1px solid #1a2a14;
+  }
+  .refTable td.refChar {
+    color: #e8d000;
+    font-weight: bold;
+  }
+  .refTable td.refPhonetic {
+    color: #888;
+  }
+</style>
+</head>
+<body>
+
+<div id="mainArea">
+<div id="output"></div>
+<div id="wordLine"></div>
+</div>
+
+<div id="controls">
+  <div>EA7LMT &nbsp;|&nbsp; insp. EA4JAH &nbsp;|&nbsp; <span id="modeLabel">Iambic B</span></div>
+  <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+    <button class="btn modeBtn" id="modeBtn">IAMBIC B</button>
+    <div class="controlGroup">
+      <button class="btn" id="wpmDown">-</button>
+      <span id="wpmLabel">20 WPM</span>
+      <button class="btn" id="wpmUp">+</button>
+    </div>
+    <div class="controlGroup">
+      <button class="btn" id="freqDown">-</button>
+      <span id="freqLabel">700 Hz</span>
+      <button class="btn" id="freqUp">+</button>
+    </div>
+    <button class="btn" id="clrBtn">CLR</button>
+    <button class="btn" id="refBtn">REF</button>
+    <button class="btn" id="helpBtn">?</button>
+  </div>
+</div>
+
+<div id="paddles">
+  <div class="paddle" id="ditPaddle">
+    <span class="paddleLabel">DIT</span>
+    <span class="key">X key</span>
+  </div>
+  <div class="paddle" id="dahPaddle">
+    <span class="paddleLabel">DAH</span>
+    <span class="key">Z key</span>
+  </div>
+</div>
+
+<div id="helpOverlay" class="overlay">
+  <h2>Help — CW Trainer — EA7LMT</h2>
+  <p style="color:#888; font-size:14px;">Inspired by the original CW Trainer by <b style="color:#b400e0;">EA4JAH</b> (Morffe) — thanks for the idea, my friend. 73.</p>
+
+  <p><b style="color:#b400e0;">IAMBIC B mode</b></p>
+  <p><b>X</b> = dit &nbsp;|&nbsp; <b>Z</b> = dah</p>
+  <p>Hold down each key to send repeated elements. If you press both at once (squeeze), the keyer alternates dit/dah automatically, just like a real electronic keyer in Iambic B mode: if both keys are released while an element is being sent, one extra alternated element is completed before stopping. Each element's duration is set by the keyer according to the WPM setting.</p>
+
+  <p><b style="color:#b400e0;">VERTICAL mode (straight key)</b></p>
+  <p><b>X</b> or <b>space</b> = the key. There's no electronic keyer here: you control each element's duration by holding the key down. A short tap is decoded as a dot and a long one as a dash, using the dit duration at the configured WPM as the reference (any press longer than twice that duration is read as a dash). This mode trains your own hand timing, just like a real straight key.</p>
+
+  <p>Speed is measured in <b>WPM</b> (words per minute, PARIS standard). In iambic mode it controls each element's duration; in vertical mode it's only used as a reference to decode your keystrokes.</p>
+  <p><b style="color:#b400e0;">Purple</b>: the box at the top shows, in purple, the pattern (dots/dashes) of the letter you're keying right now, not yet resolved.</p>
+  <p><b style="color:#e8d000;">Yellow</b>: in the text line, letters that have already been decoded and confirmed (after the letter gap).</p>
+  <p><b style="color:#39ff14;">Green</b>: within that line, the most recent letter you just typed, so you can spot it at a glance.</p>
+  <p>CLR clears the decoded text.</p>
+  <button class="btn closeBtn" onclick="document.getElementById('helpOverlay').style.display='none'">Close</button>
+</div>
+
+<div id="refOverlay" class="overlay">
+  <h2>Morse Reference</h2>
+  <p style="color:#888; font-size:14px;">Code, mnemonic, and phonetic alphabet for every character this trainer decodes. Reference only — not shown during practice.</p>
+  <table class="refTable">
+    <thead>
+      <tr><th></th><th>Code</th><th>Mnemonic</th><th>Phonetic</th></tr>
+    </thead>
+    <tbody id="refTableBody"></tbody>
+  </table>
+  <button class="btn closeBtn" onclick="document.getElementById('refOverlay').style.display='none'">Close</button>
+</div>
+
+<script>
+// ---------- Morse lookup table ----------
+const MORSE = {
+  ".-":"A","-...":"B","-.-.":"C","-..":"D",".":"E","..-.":"F","--.":"G",
+  "....":"H","..":"I",".---":"J","-.-":"K",".-..":"L","--":"M","-.":"N",
+  "---":"O",".--.":"P","--.-":"Q",".-.":"R","...":"S","-":"T","..-":"U",
+  "...-":"V",".--":"W","-..-":"X","-.--":"Y","--..":"Z",
+  "-----":"0",".----":"1","..---":"2","...--":"3","....-":"4",
+  ".....":"5","-....":"6","--...":"7","---..":"8","----.":"9",
+  ".-.-.-":".","--..--":",","..--..":"?","-.-.--":"!","-....-":"-",
+  "-..-.":"/","-.--.":"(","-.--.-":")",".-...":"&","---...":":",
+  "-.-.-.":";","-...-":"=",".-.-.":"+","..--.-":"_",".-..-.":"\"",
+  "...-..-":"$",".--.-.":"@"
+};
+
+// ---------- State ----------
+let wpm = 20;
+let unit = 1200 / wpm; // ms, dit duration (PARIS standard)
+
+let ditHeld = false;
+let dahHeld = false;
+
+// mode: 'iambic' or 'straight'
+let mode = 'iambic';
+
+// state specific to the straight-key mode
+let straightKeyDown = false;
+let straightPressStart = 0;
+
+let currentPattern = "";   // pattern of the letter currently being keyed
+let outputEl = document.getElementById('output');
+
+let letterGapTimer = null;
+let wordGapTimer = null;
+
+let keyerRunning = false;
+let lastSent = null; // 'dit' or 'dah', used to alternate elements during a squeeze
+let lastElementEnd = 0; // performance.now() timestamp when the last tone actually stopped
+
+const ditPaddleEl = document.getElementById('ditPaddle');
+const dahPaddleEl = document.getElementById('dahPaddle');
+const wpmLabel = document.getElementById('wpmLabel');
+const paddlesEl = document.getElementById('paddles');
+const modeBtn = document.getElementById('modeBtn');
+const modeLabel = document.getElementById('modeLabel');
+const mainAreaEl = document.getElementById('mainArea');
+const controlsEl = document.getElementById('controls');
+
+// ---------- Dynamic bottom padding ----------
+// #controls and #paddles are fixed-position, so #mainArea needs a
+// bottom padding equal to their combined height, or newly written
+// text would end up hidden underneath them. That combined height is
+// not constant: the control bar can wrap onto a second line on narrow
+// screens, or when a button's label changes length (e.g. switching
+// mode), so the padding is recalculated whenever their size changes.
+function updateMainPadding() {
+  const totalHeight = controlsEl.offsetHeight + paddlesEl.offsetHeight;
+  mainAreaEl.style.paddingBottom = totalHeight + 'px';
+}
+if ('ResizeObserver' in window) {
+  const ro = new ResizeObserver(updateMainPadding);
+  ro.observe(controlsEl);
+  ro.observe(paddlesEl);
+} else {
+  window.addEventListener('resize', updateMainPadding);
+}
+
+function updateUnit() {
+  unit = 1200 / wpm;
+  wpmLabel.textContent = wpm + " WPM";
+}
+
+// ---------- Wake Lock ----------
+// Keeps the screen on during a practice session using the standard
+// Screen Wake Lock API, with no external dependencies.
+let wakeLock = null;
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator) || wakeLock) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch (err) {
+    // Can fail if the tab isn't visible or permission is denied;
+    // not critical to the keyer's operation.
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') requestWakeLock();
+});
+
+// ---------- Display ----------
+const wordLineEl = document.getElementById('wordLine');
+let textBuffer = "";
+
+function updatePatternDisplay() {
+  outputEl.textContent = currentPattern.split('').join(' ');
+  outputEl.classList.add('building'); // purple: letter still being built
+}
+
+// Appends a single new character to the text line without touching
+// existing spans: clears the "current" (green) class from the last
+// span and appends a fresh one marked as current. This keeps the cost
+// of each letter O(1) regardless of how long the session has been.
+function appendWordChar(ch) {
+  const prevCurrent = wordLineEl.querySelector('.letter.current');
+  if (prevCurrent) prevCurrent.classList.remove('current');
+
+  const span = document.createElement('span');
+  span.className = 'letter current';
+  span.textContent = ch === ' ' ? '\u00A0' : ch;
+  wordLineEl.appendChild(span);
+  wordLineEl.scrollTop = wordLineEl.scrollHeight;
+}
+
+function finalizeLetter() {
+  if (!currentPattern) return;
+  const decoded = MORSE[currentPattern] || '*';
+
+  currentPattern = "";
+  outputEl.classList.remove('building'); // back to green: letter resolved
+  outputEl.textContent = decoded;
+
+  textBuffer += decoded;
+  appendWordChar(decoded);
+}
+
+function appendWordSpace() {
+  if (textBuffer && !textBuffer.endsWith(' ')) {
+    textBuffer += ' ';
+    appendWordChar(' ');
+  }
+}
+
+function resetGapTimers() {
+  if (letterGapTimer) { clearTimeout(letterGapTimer); letterGapTimer = null; }
+  if (wordGapTimer) { clearTimeout(wordGapTimer); wordGapTimer = null; }
+}
+
+function scheduleGapDetection() {
+  resetGapTimers();
+  // Both gaps are measured from the real end of the last tone, not from
+  // the moment this function runs, so any time already spent (e.g. the
+  // mandatory intra-character gap in the iambic engine, or ordinary
+  // setTimeout drift) is subtracted rather than added on top.
+  const elapsed = performance.now() - lastElementEnd;
+  const toLetterGap = Math.max(0, unit * 3 - elapsed);
+  const toWordGap = Math.max(0, unit * 7 - elapsed);
+
+  letterGapTimer = setTimeout(() => {
+    finalizeLetter();
+  }, toLetterGap);
+  wordGapTimer = setTimeout(() => {
+    appendWordSpace();
+  }, toWordGap);
+}
+
+// ---------- Audio (adjustable tone) ----------
+let audioCtx = null;
+let osc = null;
+let gainNode = null;
+
+let toneFreq = 700; // Hz, adjustable between 500 and 900
+
+function ensureAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+}
+
+function toneOn() {
+  ensureAudio();
+  if (osc) return;
+  osc = audioCtx.createOscillator();
+  gainNode = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = toneFreq;
+  gainNode.gain.value = 0;
+  osc.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+  osc.start();
+  // Smooth ramp-up: the starting value is set explicitly to avoid the
+  // click caused by an abrupt jump in gain.
+  const now = audioCtx.currentTime;
+  gainNode.gain.setValueAtTime(0, now);
+  gainNode.gain.linearRampToValueAtTime(0.25, now + 0.012);
+}
+
+function toneOff() {
+  if (!osc) return;
+  const now = audioCtx.currentTime;
+  gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+  gainNode.gain.linearRampToValueAtTime(0, now + 0.012);
+  osc.stop(now + 0.02);
+  osc = null;
+  gainNode = null;
+}
+
+// ---------- Iambic B keyer ----------
+// Squeeze detection is fully event-driven (keydown/keyup), with no
+// polling loop, so the keyer's timing precision is bounded only by
+// the browser's own keyboard event resolution.
+let elementInProgress = false; // true during an element's tone + intra-character space
+let currentType = null;        // 'dit' | 'dah' | null, type of the element in progress
+let oppositeDuringCurrent = false;
+
+function sendElement(type) {
+  return new Promise(resolve => {
+    resetGapTimers();
+    const duration = type === 'dit' ? unit : unit * 3;
+    const paddleEl = type === 'dit' ? ditPaddleEl : dahPaddleEl;
+
+    paddleEl.classList.add('active');
+    if (currentPattern === "") {
+      outputEl.textContent = ""; // starting a new letter: clear the previously decoded one
+    }
+    currentPattern += (type === 'dit' ? '.' : '-');
+    updatePatternDisplay();
+    toneOn();
+
+    currentType = type;
+    elementInProgress = true;
+    oppositeDuringCurrent = false;
+
+    setTimeout(() => {
+      paddleEl.classList.remove('active');
+      toneOff();
+      lastElementEnd = performance.now();
+
+      // Intra-character space (1 unit) — the opposite paddle can still
+      // register a squeeze during this gap.
+      setTimeout(() => {
+        elementInProgress = false;
+        currentType = null;
+        lastSent = type;
+        resolve(oppositeDuringCurrent);
+      }, unit);
+    }, duration);
+  });
+}
+
+async function keyerLoop() {
+  if (keyerRunning) return;
+  keyerRunning = true;
+
+  while (ditHeld || dahHeld) {
+    let toSend;
+    if (ditHeld && dahHeld) {
+      // squeeze: alternate relative to the last element sent
+      toSend = lastSent === 'dit' ? 'dah' : 'dit';
+    } else if (ditHeld) {
+      toSend = 'dit';
+    } else {
+      toSend = 'dah';
+    }
+
+    const oppositeDuring = await sendElement(toSend);
+
+    // Iambic B: if both paddles are released by the time the element
+    // finishes, but the opposite paddle was pressed during it, send
+    // one extra alternated element before stopping.
+    if (!ditHeld && !dahHeld && oppositeDuring) {
+      const extra = toSend === 'dit' ? 'dah' : 'dit';
+      await sendElement(extra);
+    }
+  }
+
+  keyerRunning = false;
+  scheduleGapDetection();
+}
+
+function pressDit() {
+  if (!ditHeld) {
+    ditHeld = true;
+    requestWakeLock();
+    if (elementInProgress && currentType === 'dah') oppositeDuringCurrent = true;
+    resetGapTimers();
+    keyerLoop();
+  }
+}
+function releaseDit() { ditHeld = false; }
+function pressDah() {
+  if (!dahHeld) {
+    dahHeld = true;
+    requestWakeLock();
+    if (elementInProgress && currentType === 'dit') oppositeDuringCurrent = true;
+    resetGapTimers();
+    keyerLoop();
+  }
+}
+function releaseDah() { dahHeld = false; }
+
+// ---------- Straight key ----------
+// No electronic keyer involved: the operator controls each element's
+// duration by holding the key down. The actual press duration is
+// measured and compared against the reference dit length (derived
+// from WPM) to decide dit vs dah. Letter/word gaps are computed the
+// same way as in iambic mode, starting from the moment the key is
+// released.
+function pressStraight() {
+  if (straightKeyDown) return;
+  straightKeyDown = true;
+  requestWakeLock();
+  resetGapTimers();
+  straightPressStart = performance.now();
+  ditPaddleEl.classList.add('active');
+  if (currentPattern === "") {
+    outputEl.textContent = "";
+  }
+  toneOn();
+}
+
+function releaseStraight() {
+  if (!straightKeyDown) return;
+  straightKeyDown = false;
+  ditPaddleEl.classList.remove('active');
+  toneOff();
+  lastElementEnd = performance.now();
+
+  const heldMs = performance.now() - straightPressStart;
+  // Threshold: less than twice a dit's length -> dot; otherwise -> dash.
+  const elementChar = heldMs <= unit * 2 ? '.' : '-';
+  currentPattern += elementChar;
+  updatePatternDisplay();
+
+  scheduleGapDetection();
+}
+
+// ---------- Mode switching ----------
+function setMode(newMode) {
+  mode = newMode;
+
+  // Stop any in-progress transmission and reset the state of both engines.
+  ditHeld = false;
+  dahHeld = false;
+  keyerRunning = false;
+  straightKeyDown = false;
+  elementInProgress = false;
+  currentType = null;
+  toneOff();
+  resetGapTimers();
+  currentPattern = "";
+  outputEl.classList.remove('building');
+  outputEl.textContent = "";
+
+  const ditLabel = ditPaddleEl.querySelector('.paddleLabel');
+  const ditKeyHint = ditPaddleEl.querySelector('.key');
+
+  if (mode === 'straight') {
+    paddlesEl.classList.add('straight-mode');
+    ditLabel.textContent = 'KEY';
+    ditKeyHint.textContent = 'space or X';
+    modeBtn.textContent = 'VERTICAL';
+    modeLabel.textContent = 'Vertical';
+  } else {
+    paddlesEl.classList.remove('straight-mode');
+    ditLabel.textContent = 'DIT';
+    ditKeyHint.textContent = 'X key';
+    modeBtn.textContent = 'IAMBIC B';
+    modeLabel.textContent = 'Iambic B';
+  }
+}
+
+// ---------- Keyboard events ----------
+window.addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+  const k = e.key.toLowerCase();
+  const c = e.code; // physical key position, independent of keyboard layout
+
+  if (mode === 'iambic') {
+    if (k === 'x' || c === 'KeyX') { pressDit(); e.preventDefault(); }
+    if (k === 'z' || k === 'y' || c === 'KeyZ') { pressDah(); e.preventDefault(); }
+  } else {
+    if (k === 'x' || c === 'KeyX' || c === 'Space' || k === ' ') { pressStraight(); e.preventDefault(); }
+  }
+});
+window.addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  const c = e.code;
+
+  if (mode === 'iambic') {
+    if (k === 'x' || c === 'KeyX') { releaseDit(); }
+    if (k === 'z' || k === 'y' || c === 'KeyZ') { releaseDah(); }
+  } else {
+    if (k === 'x' || c === 'KeyX' || c === 'Space' || k === ' ') { releaseStraight(); }
+  }
+});
+
+// Optional touch support on the paddle panels, for touchscreen use.
+ditPaddleEl.addEventListener('touchstart', (e) => {
+  if (mode === 'iambic') pressDit(); else pressStraight();
+  e.preventDefault();
+});
+ditPaddleEl.addEventListener('touchend', (e) => {
+  if (mode === 'iambic') releaseDit(); else releaseStraight();
+  e.preventDefault();
+});
+dahPaddleEl.addEventListener('touchstart', (e) => {
+  if (mode === 'iambic') pressDah();
+  e.preventDefault();
+});
+dahPaddleEl.addEventListener('touchend', (e) => {
+  if (mode === 'iambic') releaseDah();
+  e.preventDefault();
+});
+
+// ---------- Controls ----------
+document.querySelectorAll('.btn').forEach(b => {
+  b.addEventListener('click', () => b.blur());
+});
+
+modeBtn.addEventListener('click', () => {
+  setMode(mode === 'iambic' ? 'straight' : 'iambic');
+});
+
+document.getElementById('wpmUp').addEventListener('click', () => {
+  wpm = Math.min(wpm + 1, 60);
+  updateUnit();
+});
+document.getElementById('wpmDown').addEventListener('click', () => {
+  wpm = Math.max(wpm - 1, 5);
+  updateUnit();
+});
+document.getElementById('freqUp').addEventListener('click', () => {
+  toneFreq = Math.min(toneFreq + 10, 900);
+  document.getElementById('freqLabel').textContent = toneFreq + ' Hz';
+});
+document.getElementById('freqDown').addEventListener('click', () => {
+  toneFreq = Math.max(toneFreq - 10, 500);
+  document.getElementById('freqLabel').textContent = toneFreq + ' Hz';
+});
+document.getElementById('clrBtn').addEventListener('click', () => {
+  outputEl.innerHTML = '';
+  outputEl.classList.remove('building');
+  currentPattern = '';
+  textBuffer = '';
+  wordLineEl.innerHTML = '';
+  resetGapTimers();
+});
+document.getElementById('helpBtn').addEventListener('click', () => {
+  document.getElementById('helpOverlay').style.display = 'block';
+});
+
+// ---------- Morse reference table ----------
+// NATO phonetic alphabet, used only for letters.
+const PHONETIC = {
+  A:"Alpha", B:"Bravo", C:"Charlie", D:"Delta", E:"Echo", F:"Foxtrot", G:"Golf",
+  H:"Hotel", I:"India", J:"Juliett", K:"Kilo", L:"Lima", M:"Mike", N:"November",
+  O:"Oscar", P:"Papa", Q:"Quebec", R:"Romeo", S:"Sierra", T:"Tango", U:"Uniform",
+  V:"Victor", W:"Whiskey", X:"X-ray", Y:"Yankee", Z:"Zulu"
+};
+
+// Descriptive names for punctuation, standing in for a phonetic word.
+const SYMBOL_NAMES = {
+  "!":"Exclamation mark", "\"":"Quotation mark", "$":"Dollar sign", "&":"Ampersand",
+  "(":"Open parenthesis", ")":"Close parenthesis", "+":"Plus sign", ",":"Comma",
+  ".":"Period", "/":"Slash", ":":"Colon", ";":"Semicolon", "=":"New section",
+  "?":"Question mark", "@":"At sign", "_":"Underscore", "-":"Hyphen"
+};
+
+// Display order for the reference table: letters, digits, then punctuation.
+const CHAR_ORDER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!\"$&()+,./:;=?@_-".split('');
+
+// Reverse lookup built from MORSE itself, so the reference table always
+// matches whatever characters the decoder actually supports.
+const CHAR_TO_CODE = {};
+for (const code in MORSE) {
+  CHAR_TO_CODE[MORSE[code]] = code;
+}
+
+// Spells out a code as "di"/"dah" syllables, with the final dot read as
+// "dit" (e.g. ".-" -> "di-dah", "..-" -> "di-di-dah", "." -> "dit").
+function buildMnemonic(code) {
+  return code.split('').map((symbol, i) => {
+    if (symbol === '-') return 'dah';
+    return i === code.length - 1 ? 'dit' : 'di';
+  }).join('-');
+}
+
+function renderReferenceTable() {
+  const tbody = document.getElementById('refTableBody');
+  const rows = CHAR_ORDER
+    .filter(ch => CHAR_TO_CODE[ch])
+    .map(ch => {
+      const code = CHAR_TO_CODE[ch];
+      const displayCode = code.replace(/\./g, '·').replace(/-/g, '–');
+      const phonetic = PHONETIC[ch] || SYMBOL_NAMES[ch] || '';
+      return `<tr><td class="refChar">${ch}</td><td>${displayCode}</td>` +
+             `<td>${buildMnemonic(code)}</td><td class="refPhonetic">${phonetic}</td></tr>`;
+    });
+  tbody.innerHTML = rows.join('');
+}
+
+document.getElementById('refBtn').addEventListener('click', () => {
+  document.getElementById('refOverlay').style.display = 'block';
+});
+
+renderReferenceTable();
+updateUnit();
+
+</script>
+</body>
+</html>
