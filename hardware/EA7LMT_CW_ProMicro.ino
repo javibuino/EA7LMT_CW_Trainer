@@ -2,7 +2,7 @@
 // PRO MICRO - HID MIRROR FOR MORSE APP / EA7LMT WEB APP
 // ATmega32U4 - 16MHz - USB-C
 //
-// Turns an iambic paddle (3.5mm stereo jack) into a USB HID
+// Turns a streight key or an iambic paddle (3.5mm stereo jack) into a USB HID
 // keyboard, sending X (dit) and Z (dah) for EA7LMT's CW Trainer
 // web app.
 //
