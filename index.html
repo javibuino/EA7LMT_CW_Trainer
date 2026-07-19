@@ -931,10 +931,10 @@ window.addEventListener('keydown', (e) => {
   const c = e.code; // physical key position, independent of keyboard layout
 
   if (mode === 'iambic') {
-    if (k === 'x' || c === 'KeyX') { pressDit(); e.preventDefault(); }
-    if (k === 'z' || k === 'y' || c === 'KeyZ') { pressDah(); e.preventDefault(); }
+    if (k === 'x' || c === 'KeyX'|| c === 'ControlLeft') { pressDit(); e.preventDefault(); }
+    if (k === 'z' || k === 'y' || c === 'KeyZ'|| c === 'ControlRight') { pressDah(); e.preventDefault(); }
   } else {
-    if (k === 'x' || c === 'KeyX' || c === 'Space' || k === ' ') { pressStraight(); e.preventDefault(); }
+    if (k === 'x' || c === 'KeyX' || c === 'Space' || k === ' ' || c === 'ControlLeft') { pressStraight(); e.preventDefault(); }
   }
 });
 window.addEventListener('keyup', (e) => {
@@ -942,10 +942,10 @@ window.addEventListener('keyup', (e) => {
   const c = e.code;
 
   if (mode === 'iambic') {
-    if (k === 'x' || c === 'KeyX') { releaseDit(); }
-    if (k === 'z' || k === 'y' || c === 'KeyZ') { releaseDah(); }
+    if (k === 'x' || c === 'KeyX' || c === 'ControlLeft') { releaseDit(); }
+    if (k === 'z' || k === 'y' || c === 'KeyZ' || c === 'ControlRight') { releaseDah(); }
   } else {
-    if (k === 'x' || c === 'KeyX' || c === 'Space' || k === ' ') { releaseStraight(); }
+    if (k === 'x' || c === 'KeyX' || c === 'Space' || k === ' ' || c === 'ControlLeft') { releaseStraight(); }
   }
 });
 
