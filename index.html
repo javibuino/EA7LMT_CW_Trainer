@@ -1177,8 +1177,7 @@ function renderReferenceTable() {
     .map(label => {
       const code = CHAR_TO_CODE[label];
       const displayCode = code.replace(/\./g, '·').replace(/-/g, '–');
-      const safeLabel = label.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return `<tr><td class="refChar" style="color:#00e5ff;">${safeLabel}${symbolTag}</td><td>${displayCode}</td>` +
+      return `<tr><td class="refChar" style="color:#00e5ff;">${label}${symbolTag}</td><td>${displayCode}</td>` +
              `<td>${buildMnemonic(code)}</td><td class="refPhonetic">${PROSIGN_NAMES[label] || ''}</td></tr>`;
     });
 
