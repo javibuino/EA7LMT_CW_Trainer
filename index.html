@@ -1,0 +1,1816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';">
+<meta name="referrer" content="no-referrer">
+<title>CW Trainer - Iambic B / Vertical (EA7LMT)</title>
+
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a0d08">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CW Trainer">
+<!-- connect-src is 'none' in the CSP above, but Service Worker registration
+     and the fetch/cache calls it makes internally don't count as a
+     "connection" the CSP governs (they're same-origin resource loads),
+     so no CSP change is needed for the offline support added below. -->
+<style>
+  * { box-sizing: border-box; }
+  /* ---------- Theme variables ---------- */
+  /* Dark is the default (matches the original neon look). Adding
+     class="light-theme" to <body> (toggled by the THEME button) swaps
+     every color below to a paper-and-ink palette tuned for contrast on
+     a light background, without touching any layout rule. */
+  body {
+    --bg: #0a0d08;
+    --text: #39ff14;
+    --muted: #888;
+    --border-soft: #1a2a14;
+    --purple: #b400e0;
+    --yellow: #e8d000;
+    --cyan: #00e5ff;
+    --red: #ff3b3b;
+    --overlay-bg: rgba(0,0,0,0.92);
+    --paddle-idle: #1a3a14;
+    --paddle-active-bg: #173a10;
+    --btn-active-bg: rgba(57,255,20,0.2);
+    --modebtn-active-bg: rgba(180,0,224,0.2);
+    --acc-char-dim: rgba(57,255,20,0.35);
+    --acc-bar-bg: rgba(57,255,20,0.04);
+    --seg-border: rgba(200,200,200,0.35);
+    --seg-dot-bg: rgba(57,255,20,0.05);
+    --seg-dash-bg: rgba(180,0,224,0.08);
+    --seg-gap-bg: rgba(255,255,255,0.02);
+    --drill-active-bg: rgba(57,255,20,0.25);
+    --btn-radius: 10px;
+  }
+  body.light-theme {
+    --bg: #f4f5ef;
+    --text: #187a18;
+    --muted: #666;
+    --border-soft: #d9dacd;
+    --purple: #8a00b8;
+    --yellow: #a67d00;
+    --cyan: #0088aa;
+    --red: #c62828;
+    --overlay-bg: rgba(255,255,255,0.96);
+    --paddle-idle: #bcd0b3;
+    --paddle-active-bg: #d8f0d0;
+    --btn-active-bg: rgba(24,122,24,0.15);
+    --modebtn-active-bg: rgba(138,0,184,0.15);
+    --acc-char-dim: rgba(24,122,24,0.3);
+    --acc-bar-bg: rgba(24,122,24,0.05);
+    --seg-border: rgba(80,80,80,0.3);
+    --seg-dot-bg: rgba(24,122,24,0.07);
+    --seg-dash-bg: rgba(138,0,184,0.09);
+    --seg-gap-bg: rgba(0,0,0,0.03);
+    --drill-active-bg: rgba(24,122,24,0.2);
+  }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  #mainArea {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    /* padding-bottom is set dynamically in JS to match the actual
+       height of #controls + #paddles, since that height changes
+       whenever the control bar wraps onto a second line. */
+  }
+  #output {
+    flex: 0 0 140px;
+    height: 140px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    font-size: 60px;
+    font-weight: bold;
+    letter-spacing: 1px;
+  }
+  #wordLine {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: flex-end;
+    padding: 14px 16px 10px;
+    font-size: 30px;
+    line-height: 1.5;
+    letter-spacing: 1px;
+    color: var(--text);
+    word-wrap: break-word;
+    overflow-y: auto;
+    flex-wrap: wrap;
+    align-content: flex-end;
+  }
+  .letter { display:inline; color: var(--yellow); white-space: pre; }
+  .letter.current { color: var(--text); }
+  .letter.prosign { color: var(--cyan); }
+  #output.prosign { color: var(--cyan); }
+  #output.building {
+    color: var(--purple);
+    font-size: 30px;
+    font-weight: normal;
+  }
+
+  #controls {
+    position: fixed; bottom: 110px; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 10px;
+    background: var(--bg);
+    border-top: 1px solid var(--border-soft);
+    font-size: 13px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .btn {
+    border: 1px solid var(--text);
+    color: var(--text);
+    background: transparent;
+    padding: 4px 10px;
+    border-radius: var(--btn-radius);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    user-select: none;
+  }
+  .btn:active { background: var(--btn-active-bg); }
+  .btn:focus { outline: none; }
+  .btn::-moz-focus-inner { border: 0; }
+  .btn.modeBtn {
+    border-color: var(--purple);
+    color: var(--purple);
+  }
+  .btn.modeBtn:active { background: var(--modebtn-active-bg); }
+  #wpmLabel { color: var(--text); }
+  .controlGroup {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  #paddles {
+    position: fixed; bottom: 0; left: 0; right: 0; height: 110px;
+    display: flex;
+  }
+  .paddle {
+    flex: 1;
+    border: 2px solid var(--text);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    color: var(--paddle-idle);
+    font-size: 18px;
+    letter-spacing: 1px;
+    transition: background 0.05s, color 0.05s;
+  }
+  .paddle .key {
+    font-size: 12px;
+    margin-top: 4px;
+    opacity: 0.7;
+  }
+  .paddle.active {
+    background: var(--paddle-active-bg);
+    color: var(--text);
+  }
+  /* Straight-key mode: collapse to a single full-width panel. */
+  #paddles.straight-mode #dahPaddle { display: none; }
+  #paddles.straight-mode #ditPaddle { flex: 1 1 100%; }
+
+  .overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: var(--overlay-bg);
+    color: var(--text);
+    padding: 24px;
+    font-size: 16px;
+    line-height: 1.7;
+    overflow-y: auto;
+    z-index: 10;
+  }
+  .overlay h2 { color: var(--purple); }
+  .overlay .closeBtn {
+    margin-top: 20px;
+  }
+
+  .refTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .refTable th {
+    color: var(--purple);
+    text-align: left;
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--text);
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+  }
+  .refTable td {
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .refTable td.refChar {
+    color: var(--yellow);
+    font-weight: bold;
+  }
+  .refTable td.refPhonetic {
+    color: var(--muted);
+  }
+
+  .accSeqRow {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    margin: 24px 0;
+  }
+  .accWord {
+    display: flex;
+    margin-right: 18px;
+    margin-bottom: 14px;
+  }
+  .accCol {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 26px;
+    margin: 0 2px;
+    padding: 0 2px;
+  }
+  .accChar {
+    font-size: 20px;
+    margin-bottom: 6px;
+    color: var(--acc-char-dim);
+  }
+  .accChar.active { color: var(--yellow); text-decoration: underline; }
+  .accChar.good { color: var(--text); }
+  .accChar.bad { color: var(--purple); }
+
+  .accBar {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 20px;
+    border: 1px solid var(--text);
+    border-radius: 3px;
+    overflow: hidden;
+    background: var(--acc-bar-bg);
+  }
+  /* Each block is one dot/dash element or one intra-character gap,
+     stacked in the order they're keyed, sized in pixels so a dash is
+     always 3x taller than a dot and the whole bar's height reflects
+     how long the character is. A light gray line separates blocks
+     instead of a single marker line across the whole bar. */
+  .accSeg {
+    position: relative;
+    border-bottom: 1px solid var(--seg-border);
+    overflow: hidden;
+  }
+  .accSeg:last-child { border-bottom: none; }
+  .accSeg.accSegDot { background: var(--seg-dot-bg); }
+  .accSeg.accSegDash { background: var(--seg-dash-bg); }
+  .accSeg.accSegGap { background: var(--seg-gap-bg); }
+  /* Fills from the bottom up to 90% of the block's own height, which is
+     where the ideal stop point sits; color follows the good/warn/bad
+     tiers. Any hold past that point spills into .accSegFillOverflow,
+     a fixed red cap for the remaining 10% -- clearly "you went over"
+     without needing a hard marker line. */
+  .accSegFillNormal {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 0%;
+    background: var(--text);
+  }
+  .accSegFillNormal.warn { background: var(--yellow); }
+  .accSegFillNormal.bad { background: var(--purple); }
+  .accSegFillOverflow {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 0%;
+    background: var(--red);
+  }
+  .accScoreNum {
+    margin-top: 4px;
+    font-size: 14px;
+    font-weight: bold;
+    min-height: 16px;
+    color: var(--muted);
+  }
+  .accScoreNum.s-good { color: var(--text); }
+  .accScoreNum.s-warn { color: var(--yellow); }
+  .accScoreNum.s-bad { color: var(--purple); }
+
+  .accStatsBar {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 14px; color: var(--muted); margin-bottom: 4px;
+  }
+
+  #accHistoryBody {
+    display: none;
+    margin-top: 14px;
+    border-top: 1px solid var(--border-soft);
+    padding-top: 10px;
+    font-size: 13px;
+    color: var(--muted);
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  #accHistoryBody .histRow {
+    border-bottom: 1px solid var(--border-soft);
+    padding: 4px 0;
+  }
+  #accHistoryBody .histRow b { color: var(--text); }
+
+  .accConfigRow {
+    display: flex; justify-content: space-between; align-items: center;
+    margin: 14px 0;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .accConfigRow .accLabel { color: var(--text); }
+  .accCheckRow label { margin-right: 16px; cursor: pointer; }
+  .accCheckRow input { margin-right: 4px; }
+  .drillTypeBtn.active { background: var(--drill-active-bg); }
+</style>
+</head>
+<body>
+
+<div id="mainArea">
+<div id="output"></div>
+<div id="wordLine"></div>
+</div>
+
+<div id="controls">
+  <div>EA7LMT &nbsp;|&nbsp; insp. EA4JAH &nbsp;|&nbsp; <span id="modeLabel">Iambic B</span></div>
+  <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+    <button class="btn modeBtn" id="modeBtn">IAMBIC B</button>
+    <div class="controlGroup">
+      <button class="btn" id="wpmDown">-</button>
+      <span id="wpmLabel">20 WPM</span>
+      <button class="btn" id="wpmUp">+</button>
+    </div>
+    <div class="controlGroup">
+      <button class="btn" id="freqDown">-</button>
+      <span id="freqLabel">700 Hz</span>
+      <button class="btn" id="freqUp">+</button>
+    </div>
+    <button class="btn" id="clrBtn">CLR</button>
+    <button class="btn" id="refBtn">REF</button>
+    <button class="btn" id="accBtn">ACC</button>
+    <button class="btn" id="helpBtn">?</button>
+    <button class="btn" id="themeBtn">LIGHT</button>
+  </div>
+</div>
+
+<div id="paddles">
+  <div class="paddle" id="ditPaddle">
+    <span class="paddleLabel">DIT</span>
+    <span class="key">X key</span>
+  </div>
+  <div class="paddle" id="dahPaddle">
+    <span class="paddleLabel">DAH</span>
+    <span class="key">Z key</span>
+  </div>
+</div>
+
+<div id="helpOverlay" class="overlay">
+  <h2>Help — CW Trainer — EA7LMT</h2>
+  <p style="color:#888; font-size:14px;">Inspired by the original CW Trainer by <b style="color:#b400e0;">EA4JAH</b> (Morffe) — thanks for the idea, my friend. 73.</p>
+
+  <p><b style="color:#b400e0;">IAMBIC B mode</b></p>
+  <p><b>X</b> = dit &nbsp;|&nbsp; <b>Z</b> = dah</p>
+  <p>Hold down each key to send repeated elements. If you press both at once (squeeze), the keyer alternates dit/dah automatically, just like a real electronic keyer in Iambic B mode: if both keys are released while an element is being sent, one extra alternated element is completed before stopping. Each element's duration is set by the keyer according to the WPM setting.</p>
+
+  <p><b style="color:#b400e0;">VERTICAL mode (straight key)</b></p>
+  <p><b>X</b> or <b>space</b> = the key. There's no electronic keyer here: you control each element's duration by holding the key down. A short tap is decoded as a dot and a long one as a dash, using the dit duration at the configured WPM as the reference (any press longer than twice that duration is read as a dash). This mode trains your own hand timing, just like a real straight key.</p>
+
+  <p>Speed is measured in <b>WPM</b> (words per minute, PARIS standard). In iambic mode it controls each element's duration; in vertical mode it's only used as a reference to decode your keystrokes.</p>
+  <p><b style="color:#b400e0;">Purple</b>: the box at the top shows, in purple, the pattern (dots/dashes) of the letter you're keying right now, not yet resolved.</p>
+  <p><b style="color:#e8d000;">Yellow</b>: in the text line, letters that have already been decoded and confirmed (after the letter gap).</p>
+  <p><b style="color:#39ff14;">Green</b>: within that line, the most recent letter you just typed, so you can spot it at a glance.</p>
+  <p><b style="color:#00e5ff;">Cyan</b>: a decoded prosign (like &lt;BT&gt; or &lt;SK&gt;) — sent as two letters with no pause between them. See the REF table for the full list.</p>
+  <p>CLR clears the decoded text.</p>
+  <button class="btn closeBtn" onclick="document.getElementById('helpOverlay').style.display='none'">Close</button>
+</div>
+
+<div id="refOverlay" class="overlay">
+  <h2>Morse Reference</h2>
+  <p style="color:#888; font-size:14px;">Code, mnemonic, and phonetic alphabet for every character this trainer decodes. Reference only — not shown during practice.</p>
+  <table class="refTable">
+    <thead>
+      <tr><th></th><th>Code</th><th>Mnemonic</th><th>Phonetic</th></tr>
+    </thead>
+    <tbody id="refTableBody"></tbody>
+  </table>
+  <button class="btn closeBtn" onclick="document.getElementById('refOverlay').style.display='none'">Close</button>
+</div>
+
+<div id="accSetupOverlay" class="overlay">
+  <h2>CW Accuracy — Setup</h2>
+  <p style="color:#888; font-size:14px;">Generates a sequence and scores how closely your keying and spacing match the ideal timing at the current WPM. Runs in Vertical (straight key) mode — switches automatically on start.</p>
+
+  <div class="accConfigRow">
+    <span class="accLabel">Drill</span>
+    <div style="display:flex; flex-wrap:wrap; gap:6px;">
+      <button class="btn drillTypeBtn active" id="accDrillSequence" data-drill="sequence">SEQ</button>
+      <button class="btn drillTypeBtn" id="accDrillDots" data-drill="dots">DOTS</button>
+      <button class="btn drillTypeBtn" id="accDrillDashes" data-drill="dashes">DASHES</button>
+      <button class="btn drillTypeBtn" id="accDrillMix" data-drill="mix">MIX</button>
+      <button class="btn drillTypeBtn" id="accDrillQcodes" data-drill="qcodes">QCODES</button>
+      <button class="btn drillTypeBtn" id="accDrillAbbrev" data-drill="abbrev">ABBR</button>
+    </div>
+  </div>
+
+  <div class="accConfigRow">
+    <span class="accLabel">Speed</span>
+    <div class="controlGroup">
+      <button class="btn" id="accWpmDown">-</button>
+      <span id="accWpmLabel">20 WPM</span>
+      <button class="btn" id="accWpmUp">+</button>
+    </div>
+  </div>
+
+  <div class="accConfigRow" id="accCharsRow">
+    <span class="accLabel" id="accCharsRowLabel">Max characters per word</span>
+    <div class="controlGroup">
+      <button class="btn" id="accCharsDown">-</button>
+      <span id="accCharsLabel">5</span>
+      <button class="btn" id="accCharsUp">+</button>
+    </div>
+  </div>
+
+  <div class="accConfigRow">
+    <span class="accLabel" id="accWordsRowLabel">Number of words</span>
+    <div class="controlGroup">
+      <button class="btn" id="accWordsDown">-</button>
+      <span id="accWordsLabel">5</span>
+      <button class="btn" id="accWordsUp">+</button>
+    </div>
+  </div>
+
+  <div class="accConfigRow">
+    <span class="accLabel">Element tolerance</span>
+    <div class="controlGroup">
+      <button class="btn" id="accTolElDown">-</button>
+      <span id="accTolElLabel">30%</span>
+      <button class="btn" id="accTolElUp">+</button>
+    </div>
+  </div>
+
+  <div class="accConfigRow">
+    <span class="accLabel">Spacing tolerance</span>
+    <div class="controlGroup">
+      <button class="btn" id="accTolSpDown">-</button>
+      <span id="accTolSpLabel">30%</span>
+      <button class="btn" id="accTolSpUp">+</button>
+    </div>
+  </div>
+
+  <div class="accConfigRow accCheckRow" id="accCharsetRow">
+    <label><input type="checkbox" id="accUseLetters" checked> Letters</label>
+    <label><input type="checkbox" id="accUseNumbers"> Numbers</label>
+    <label><input type="checkbox" id="accUsePunct"> Punctuation</label>
+  </div>
+
+  <div class="accConfigRow">
+    <span class="accLabel">On mistake</span>
+    <button class="btn modeBtn" id="accStrictBtn">LENIENT</button>
+  </div>
+
+  <button class="btn closeBtn" id="accStartBtn" style="border-color:#39ff14;">START</button>
+  <button class="btn closeBtn" onclick="document.getElementById('accSetupOverlay').style.display='none'">Close</button>
+</div>
+
+<div id="accPracticeOverlay" class="overlay">
+  <div class="accStatsBar">
+    <span id="accProgressLabel">0 / 0</span>
+    <button class="btn" id="accStopBtn">STOP</button>
+  </div>
+  <div class="accSeqRow" id="accSeqRow"></div>
+</div>
+
+<div id="accResultsOverlay" class="overlay">
+  <h2>CW Accuracy — Results</h2>
+  <div id="accResultsBody" style="font-size:15px;"></div>
+  <button class="btn closeBtn" id="accRepeatBtn" style="border-color:#39ff14;">&#8635; REPEAT</button>
+  <button class="btn closeBtn" id="accNewBtn" style="border-color:#39ff14;">&#8644; NEW</button>
+  <button class="btn closeBtn" id="accCopyBtn">COPY</button>
+  <button class="btn closeBtn" id="accHistBtn">HISTORY</button>
+  <button class="btn closeBtn" onclick="document.getElementById('accResultsOverlay').style.display='none'">Close</button>
+  <div id="accHistoryBody"></div>
+</div>
+
+<script>
+// ---------- Morse lookup table ----------
+const MORSE = {
+  ".-":"A","-...":"B","-.-.":"C","-..":"D",".":"E","..-.":"F","--.":"G",
+  "....":"H","..":"I",".---":"J","-.-":"K",".-..":"L","--":"M","-.":"N",
+  "---":"O",".--.":"P","--.-":"Q",".-.":"R","...":"S","-":"T","..-":"U",
+  "...-":"V",".--":"W","-..-":"X","-.--":"Y","--..":"Z",
+  "-----":"0",".----":"1","..---":"2","...--":"3","....-":"4",
+  ".....":"5","-....":"6","--...":"7","---..":"8","----.":"9",
+  ".-.-.-":".","--..--":",","..--..":"?","-.-.--":"!","-....-":"-",
+  "-..-.":"/","-.--.-":")","---...":":",
+  "-.-.-.":";","..--.-":"_",".-..-.":"\"",
+  "...-..-":"$",".--.-.":"@",
+  // Prosigns. Several share their code with a punctuation mark above
+  // (BT/AR/KN/AS are, by ITU convention, literally the same Morse
+  // pattern as =, +, (, and &). For a CW trainer, decoding the prosign
+  // reading is far more useful than the rarely-needed symbol, so those
+  // four codes decode as prosigns here instead. A prosign only decodes
+  // correctly when sent with no letter gap between its two component
+  // letters, exactly as a real prosign is keyed -- pause between them
+  // and they decode as two separate letters instead.
+  "-...-":"<BT>", ".-.-.":"<AR>", "-.--.":"<KN>", ".-...":"<AS>",
+  "...-.-":"<SK>", "-.-.-":"<KA>", "...-.":"<VE>", "........":"<HH>"
+};
+
+// ---------- State ----------
+let wpm = 20;
+let unit = 1200 / wpm; // ms, dit duration (PARIS standard)
+
+let theme = 'dark'; // 'dark' | 'light'
+const themeBtn = document.getElementById('themeBtn');
+const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+
+function applyTheme(newTheme) {
+  theme = newTheme;
+  document.body.classList.toggle('light-theme', theme === 'light');
+  themeBtn.textContent = theme === 'light' ? 'DARK' : 'LIGHT';
+  themeColorMeta.setAttribute('content', theme === 'light' ? '#f4f5ef' : '#0a0d08');
+}
+
+let ditHeld = false;
+let dahHeld = false;
+
+// mode: 'iambic' or 'straight'
+let mode = 'iambic';
+
+// state specific to the straight-key mode
+let straightKeyDown = false;
+let straightPressStart = 0;
+
+let currentPattern = "";   // pattern of the letter currently being keyed
+let outputEl = document.getElementById('output');
+
+let letterGapTimer = null;
+let wordGapTimer = null;
+
+let keyerRunning = false;
+let lastSent = null; // 'dit' or 'dah', used to alternate elements during a squeeze
+let lastElementEnd = 0; // performance.now() timestamp when the last tone actually stopped
+
+const ditPaddleEl = document.getElementById('ditPaddle');
+const dahPaddleEl = document.getElementById('dahPaddle');
+const wpmLabel = document.getElementById('wpmLabel');
+const paddlesEl = document.getElementById('paddles');
+const modeBtn = document.getElementById('modeBtn');
+const modeLabel = document.getElementById('modeLabel');
+const mainAreaEl = document.getElementById('mainArea');
+const controlsEl = document.getElementById('controls');
+
+// ---------- Dynamic bottom padding ----------
+// #controls and #paddles are fixed-position, so #mainArea needs a
+// bottom padding equal to their combined height, or newly written
+// text would end up hidden underneath them. That combined height is
+// not constant: the control bar can wrap onto a second line on narrow
+// screens, or when a button's label changes length (e.g. switching
+// mode), so the padding is recalculated whenever their size changes.
+function updateMainPadding() {
+  const totalHeight = controlsEl.offsetHeight + paddlesEl.offsetHeight;
+  mainAreaEl.style.paddingBottom = totalHeight + 'px';
+}
+if ('ResizeObserver' in window) {
+  const ro = new ResizeObserver(updateMainPadding);
+  ro.observe(controlsEl);
+  ro.observe(paddlesEl);
+} else {
+  window.addEventListener('resize', updateMainPadding);
+}
+
+function updateUnit() {
+  unit = 1200 / wpm;
+  wpmLabel.textContent = wpm + " WPM";
+}
+
+// ---------- Wake Lock ----------
+// Keeps the screen on during a practice session using the standard
+// Screen Wake Lock API, with no external dependencies.
+let wakeLock = null;
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator) || wakeLock) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch (err) {
+    // Can fail if the tab isn't visible or permission is denied;
+    // not critical to the keyer's operation.
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') requestWakeLock();
+});
+
+// ---------- Display ----------
+const wordLineEl = document.getElementById('wordLine');
+let textBuffer = "";
+
+function updatePatternDisplay() {
+  outputEl.textContent = currentPattern.split('').join(' ');
+  outputEl.classList.add('building'); // purple: letter still being built
+}
+
+// Appends a single new character to the text line without touching
+// existing spans: clears the "current" (green) class from the last
+// span and appends a fresh one marked as current. This keeps the cost
+// of each letter O(1) regardless of how long the session has been.
+function appendWordChar(ch, isProsign) {
+  const prevCurrent = wordLineEl.querySelector('.letter.current');
+  if (prevCurrent) prevCurrent.classList.remove('current');
+
+  const span = document.createElement('span');
+  span.className = 'letter current' + (isProsign ? ' prosign' : '');
+  span.textContent = ch === ' ' ? '\u00A0' : ch;
+  wordLineEl.appendChild(span);
+  wordLineEl.scrollTop = wordLineEl.scrollHeight;
+}
+
+function finalizeLetter() {
+  if (!currentPattern) return;
+  const decoded = MORSE[currentPattern] || '*';
+  // Prosigns are stored as multi-character labels like "<BT>", so any
+  // decoded string longer than one character starting with "<" is one.
+  const isProsign = decoded.length > 1 && decoded.charAt(0) === '<';
+
+  currentPattern = "";
+  outputEl.classList.remove('building'); // back to green: letter resolved
+  outputEl.classList.toggle('prosign', isProsign);
+  outputEl.textContent = decoded;
+
+  textBuffer += decoded;
+  appendWordChar(decoded, isProsign);
+}
+
+function appendWordSpace() {
+  if (textBuffer && !textBuffer.endsWith(' ')) {
+    textBuffer += ' ';
+    appendWordChar(' ');
+  }
+}
+
+function resetGapTimers() {
+  if (letterGapTimer) { clearTimeout(letterGapTimer); letterGapTimer = null; }
+  if (wordGapTimer) { clearTimeout(wordGapTimer); wordGapTimer = null; }
+}
+
+function scheduleGapDetection() {
+  resetGapTimers();
+  // Both gaps are measured from the real end of the last tone, not from
+  // the moment this function runs, so any time already spent (e.g. the
+  // mandatory intra-character gap in the iambic engine, or ordinary
+  // setTimeout drift) is subtracted rather than added on top.
+  const elapsed = performance.now() - lastElementEnd;
+  const toLetterGap = Math.max(0, unit * 3 - elapsed);
+  const toWordGap = Math.max(0, unit * 7 - elapsed);
+
+  letterGapTimer = setTimeout(() => {
+    finalizeLetter();
+  }, toLetterGap);
+  wordGapTimer = setTimeout(() => {
+    appendWordSpace();
+  }, toWordGap);
+}
+
+// ---------- Audio (adjustable tone) ----------
+let audioCtx = null;
+let osc = null;
+let gainNode = null;
+
+let toneFreq = 700; // Hz, adjustable between 500 and 900
+
+function ensureAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+}
+
+const TONE_PEAK_GAIN = 0.25;
+const RAMP_SECONDS = 0.006; // 6ms edges, raised-cosine shaped
+const RAMP_STEPS = 32;
+
+// Builds a raised-cosine ("smooth S-curve") ramp from startVal to endVal:
+// value(i) = start + (end-start) * (1-cos(pi*i/(steps-1))) / 2
+// This keeps both endpoints' slope at zero, unlike a linear ramp, so the
+// edge doesn't sound like a hard click at high WPM — closer to how a
+// real HF transceiver's keying filter shapes its edges.
+function raisedCosineCurve(startVal, endVal) {
+  const curve = new Float32Array(RAMP_STEPS);
+  for (let i = 0; i < RAMP_STEPS; i++) {
+    const t = i / (RAMP_STEPS - 1);
+    curve[i] = startVal + (endVal - startVal) * (1 - Math.cos(Math.PI * t)) / 2;
+  }
+  return curve;
+}
+
+function toneOn() {
+  ensureAudio();
+  if (osc) return;
+  osc = audioCtx.createOscillator();
+  gainNode = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = toneFreq;
+  gainNode.gain.value = 0;
+  osc.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+  osc.start();
+  const now = audioCtx.currentTime;
+  gainNode.gain.cancelScheduledValues(now);
+  gainNode.gain.setValueCurveAtTime(raisedCosineCurve(0, TONE_PEAK_GAIN), now, RAMP_SECONDS);
+}
+
+function toneOff() {
+  if (!osc) return;
+  const now = audioCtx.currentTime;
+  const currentGain = gainNode.gain.value;
+  gainNode.gain.cancelScheduledValues(now);
+  gainNode.gain.setValueCurveAtTime(raisedCosineCurve(currentGain, 0), now, RAMP_SECONDS);
+  osc.stop(now + RAMP_SECONDS + 0.002);
+  osc = null;
+  gainNode = null;
+}
+
+// ---------- Iambic B keyer ----------
+// Squeeze detection is fully event-driven (keydown/keyup), with no
+// polling loop, so the keyer's timing precision is bounded only by
+// the browser's own keyboard event resolution.
+let elementInProgress = false; // true during an element's tone + intra-character space
+let currentType = null;        // 'dit' | 'dah' | null, type of the element in progress
+let oppositeDuringCurrent = false;
+
+function sendElement(type) {
+  return new Promise(resolve => {
+    resetGapTimers();
+    const duration = type === 'dit' ? unit : unit * 3;
+    const paddleEl = type === 'dit' ? ditPaddleEl : dahPaddleEl;
+
+    paddleEl.classList.add('active');
+    if (currentPattern === "") {
+      outputEl.textContent = ""; // starting a new letter: clear the previously decoded one
+    }
+    currentPattern += (type === 'dit' ? '.' : '-');
+    updatePatternDisplay();
+    toneOn();
+
+    currentType = type;
+    elementInProgress = true;
+    oppositeDuringCurrent = false;
+
+    setTimeout(() => {
+      paddleEl.classList.remove('active');
+      toneOff();
+      lastElementEnd = performance.now();
+
+      // Intra-character space (1 unit) — the opposite paddle can still
+      // register a squeeze during this gap.
+      setTimeout(() => {
+        elementInProgress = false;
+        currentType = null;
+        lastSent = type;
+        resolve(oppositeDuringCurrent);
+      }, unit);
+    }, duration);
+  });
+}
+
+async function keyerLoop() {
+  if (keyerRunning) return;
+  keyerRunning = true;
+
+  while (ditHeld || dahHeld) {
+    let toSend;
+    if (ditHeld && dahHeld) {
+      // squeeze: alternate relative to the last element sent
+      toSend = lastSent === 'dit' ? 'dah' : 'dit';
+    } else if (ditHeld) {
+      toSend = 'dit';
+    } else {
+      toSend = 'dah';
+    }
+
+    const oppositeDuring = await sendElement(toSend);
+
+    // Iambic B: if both paddles are released by the time the element
+    // finishes, but the opposite paddle was pressed during it, send
+    // one extra alternated element before stopping.
+    if (!ditHeld && !dahHeld && oppositeDuring) {
+      const extra = toSend === 'dit' ? 'dah' : 'dit';
+      await sendElement(extra);
+    }
+  }
+
+  keyerRunning = false;
+  scheduleGapDetection();
+}
+
+function pressDit() {
+  if (!ditHeld) {
+    ditHeld = true;
+    requestWakeLock();
+    if (elementInProgress && currentType === 'dah') oppositeDuringCurrent = true;
+    resetGapTimers();
+    keyerLoop();
+  }
+}
+function releaseDit() { ditHeld = false; }
+function pressDah() {
+  if (!dahHeld) {
+    dahHeld = true;
+    requestWakeLock();
+    if (elementInProgress && currentType === 'dit') oppositeDuringCurrent = true;
+    resetGapTimers();
+    keyerLoop();
+  }
+}
+function releaseDah() { dahHeld = false; }
+
+// ---------- Straight key ----------
+// No electronic keyer involved: the operator controls each element's
+// duration by holding the key down. The actual press duration is
+// measured and compared against the reference dit length (derived
+// from WPM) to decide dit vs dah. Letter/word gaps are computed the
+// same way as in iambic mode, starting from the moment the key is
+// released.
+function pressStraight() {
+  if (straightKeyDown) return;
+  straightKeyDown = true;
+  requestWakeLock();
+  resetGapTimers();
+  straightPressStart = performance.now();
+  if (accuracyActive) accOnPress();
+  ditPaddleEl.classList.add('active');
+  if (currentPattern === "") {
+    outputEl.textContent = "";
+  }
+  toneOn();
+}
+
+function releaseStraight() {
+  if (!straightKeyDown) return;
+  straightKeyDown = false;
+  ditPaddleEl.classList.remove('active');
+  toneOff();
+  lastElementEnd = performance.now();
+
+  const heldMs = performance.now() - straightPressStart;
+  // Threshold: less than twice a dit's length -> dot; otherwise -> dash.
+  const elementChar = heldMs <= unit * 2 ? '.' : '-';
+  currentPattern += elementChar;
+  updatePatternDisplay();
+
+  if (accuracyActive) {
+    accOnRelease(heldMs, elementChar);
+  } else {
+    scheduleGapDetection();
+  }
+}
+
+// ---------- Mode switching ----------
+function setMode(newMode) {
+  mode = newMode;
+
+  // Stop any in-progress transmission and reset the state of both engines.
+  ditHeld = false;
+  dahHeld = false;
+  keyerRunning = false;
+  straightKeyDown = false;
+  elementInProgress = false;
+  currentType = null;
+  toneOff();
+  resetGapTimers();
+  currentPattern = "";
+  outputEl.classList.remove('building');
+  outputEl.textContent = "";
+
+  const ditLabel = ditPaddleEl.querySelector('.paddleLabel');
+  const ditKeyHint = ditPaddleEl.querySelector('.key');
+
+  if (mode === 'straight') {
+    paddlesEl.classList.add('straight-mode');
+    ditLabel.textContent = 'KEY';
+    ditKeyHint.textContent = 'space or X';
+    modeBtn.textContent = 'VERTICAL';
+    modeLabel.textContent = 'Vertical';
+  } else {
+    paddlesEl.classList.remove('straight-mode');
+    ditLabel.textContent = 'DIT';
+    ditKeyHint.textContent = 'X key';
+    modeBtn.textContent = 'IAMBIC B';
+    modeLabel.textContent = 'Iambic B';
+  }
+}
+
+// ---------- Keyboard events ----------
+window.addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+  const k = e.key.toLowerCase();
+  const c = e.code; // physical key position, independent of keyboard layout
+
+  if (mode === 'iambic') {
+    if (k === 'x' || c === 'KeyX') { pressDit(); e.preventDefault(); }
+    if (k === 'z' || k === 'y' || c === 'KeyZ') { pressDah(); e.preventDefault(); }
+  } else {
+    if (k === 'x' || c === 'KeyX' || c === 'Space' || k === ' ') { pressStraight(); e.preventDefault(); }
+  }
+});
+window.addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  const c = e.code;
+
+  if (mode === 'iambic') {
+    if (k === 'x' || c === 'KeyX') { releaseDit(); }
+    if (k === 'z' || k === 'y' || c === 'KeyZ') { releaseDah(); }
+  } else {
+    if (k === 'x' || c === 'KeyX' || c === 'Space' || k === ' ') { releaseStraight(); }
+  }
+});
+
+// Optional touch support on the paddle panels, for touchscreen use.
+ditPaddleEl.addEventListener('touchstart', (e) => {
+  if (mode === 'iambic') pressDit(); else pressStraight();
+  e.preventDefault();
+});
+ditPaddleEl.addEventListener('touchend', (e) => {
+  if (mode === 'iambic') releaseDit(); else releaseStraight();
+  e.preventDefault();
+});
+dahPaddleEl.addEventListener('touchstart', (e) => {
+  if (mode === 'iambic') pressDah();
+  e.preventDefault();
+});
+dahPaddleEl.addEventListener('touchend', (e) => {
+  if (mode === 'iambic') releaseDah();
+  e.preventDefault();
+});
+
+// ---------- Controls ----------
+document.querySelectorAll('.btn').forEach(b => {
+  b.addEventListener('click', () => b.blur());
+});
+
+modeBtn.addEventListener('click', () => {
+  setMode(mode === 'iambic' ? 'straight' : 'iambic');
+});
+
+document.getElementById('wpmUp').addEventListener('click', () => {
+  wpm = Math.min(wpm + 1, 60);
+  updateUnit();
+  saveSettings();
+});
+document.getElementById('wpmDown').addEventListener('click', () => {
+  wpm = Math.max(wpm - 1, 5);
+  updateUnit();
+  saveSettings();
+});
+document.getElementById('freqUp').addEventListener('click', () => {
+  toneFreq = Math.min(toneFreq + 10, 900);
+  document.getElementById('freqLabel').textContent = toneFreq + ' Hz';
+  saveSettings();
+});
+document.getElementById('freqDown').addEventListener('click', () => {
+  toneFreq = Math.max(toneFreq - 10, 500);
+  document.getElementById('freqLabel').textContent = toneFreq + ' Hz';
+  saveSettings();
+});
+document.getElementById('clrBtn').addEventListener('click', () => {
+  outputEl.innerHTML = '';
+  outputEl.classList.remove('building');
+  currentPattern = '';
+  textBuffer = '';
+  wordLineEl.innerHTML = '';
+  resetGapTimers();
+});
+document.getElementById('helpBtn').addEventListener('click', () => {
+  document.getElementById('helpOverlay').style.display = 'block';
+});
+themeBtn.addEventListener('click', () => {
+  applyTheme(theme === 'dark' ? 'light' : 'dark');
+  saveSettings();
+});
+
+// ---------- Local settings persistence (localStorage) ----------
+// Everything the operator tunes by hand — tone, speed, and the ACC
+// drill defaults — is saved on every change and restored on load, so
+// a page refresh (or reopening the PWA later) starts from the same
+// setup instead of the hardcoded defaults.
+const SETTINGS_KEY = 'cwTrainerSettings';
+
+function saveSettings() {
+  const settings = {
+    wpm,
+    toneFreq,
+    theme,
+    accCharsPerWord,
+    accWordCount,
+    accTolElements,
+    accTolSpaces,
+    accStrict,
+    accDrillType,
+    accUseLetters: document.getElementById('accUseLetters').checked,
+    accUseNumbers: document.getElementById('accUseNumbers').checked,
+    accUsePunct: document.getElementById('accUsePunct').checked
+  };
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch (err) {
+    // Storage can fail (private browsing, quota); not critical, so the
+    // trainer just keeps running with in-memory values only.
+  }
+}
+
+function loadSettings() {
+  let saved;
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return;
+    saved = JSON.parse(raw);
+  } catch (err) {
+    return;
+  }
+
+  if (typeof saved.wpm === 'number') wpm = saved.wpm;
+  if (typeof saved.toneFreq === 'number') toneFreq = saved.toneFreq;
+  applyTheme(saved.theme === 'light' ? 'light' : 'dark');
+  if (typeof saved.accCharsPerWord === 'number') accCharsPerWord = saved.accCharsPerWord;
+  if (typeof saved.accWordCount === 'number') accWordCount = saved.accWordCount;
+  if (typeof saved.accTolElements === 'number') accTolElements = saved.accTolElements;
+  if (typeof saved.accTolSpaces === 'number') accTolSpaces = saved.accTolSpaces;
+  if (typeof saved.accStrict === 'boolean') accStrict = saved.accStrict;
+  if (typeof saved.accDrillType === 'string') accDrillType = saved.accDrillType;
+
+  document.getElementById('freqLabel').textContent = toneFreq + ' Hz';
+  document.getElementById('accCharsLabel').textContent = accCharsPerWord;
+  document.getElementById('accWordsLabel').textContent = accWordCount;
+  document.getElementById('accTolElLabel').textContent = accTolElements + '%';
+  document.getElementById('accTolSpLabel').textContent = accTolSpaces + '%';
+  document.getElementById('accStrictBtn').textContent = accStrict ? 'STRICT' : 'LENIENT';
+  if (typeof saved.accUseLetters === 'boolean') document.getElementById('accUseLetters').checked = saved.accUseLetters;
+  if (typeof saved.accUseNumbers === 'boolean') document.getElementById('accUseNumbers').checked = saved.accUseNumbers;
+  if (typeof saved.accUsePunct === 'boolean') document.getElementById('accUsePunct').checked = saved.accUsePunct;
+
+  // Re-select the saved drill type button and its dependent labels.
+  document.querySelectorAll('.drillTypeBtn').forEach(b => b.classList.remove('active'));
+  const savedBtn = document.querySelector(`.drillTypeBtn[data-drill="${accDrillType}"]`);
+  if (savedBtn) savedBtn.classList.add('active');
+  accUpdateDrillUi();
+}
+
+// Shows/hides the setup fields that only make sense for certain drill
+// types: the charset checkboxes and per-word length only apply to
+// free 'sequence' drills; Q-codes/Abbreviations use fixed-length bank
+// entries so that stepper is hidden entirely; raw element drills
+// (dots/dashes/mix) use "groups" wording instead of "words/characters".
+function accUpdateDrillUi() {
+  const isSequence = accDrillType === 'sequence';
+  const isBank = accDrillType === 'qcodes' || accDrillType === 'abbrev';
+
+  document.getElementById('accCharsetRow').style.display = isSequence ? 'flex' : 'none';
+  document.getElementById('accCharsRow').style.display = isBank ? 'none' : 'flex';
+  document.getElementById('accCharsRowLabel').textContent =
+    isSequence ? 'Max characters per word' : 'Max elements per group';
+  document.getElementById('accWordsRowLabel').textContent =
+    isSequence || isBank ? 'Number of words' : 'Number of groups';
+}
+
+// ---------- Morse reference table ----------
+// NATO phonetic alphabet, used only for letters.
+const PHONETIC = {
+  A:"Alpha", B:"Bravo", C:"Charlie", D:"Delta", E:"Echo", F:"Foxtrot", G:"Golf",
+  H:"Hotel", I:"India", J:"Juliett", K:"Kilo", L:"Lima", M:"Mike", N:"November",
+  O:"Oscar", P:"Papa", Q:"Quebec", R:"Romeo", S:"Sierra", T:"Tango", U:"Uniform",
+  V:"Victor", W:"Whiskey", X:"X-ray", Y:"Yankee", Z:"Zulu"
+};
+
+// Descriptive names for punctuation, standing in for a phonetic word.
+const SYMBOL_NAMES = {
+  "!":"Exclamation mark", "\"":"Quotation mark", "$":"Dollar sign", "&":"Ampersand",
+  "(":"Open parenthesis", ")":"Close parenthesis", "+":"Plus sign", ",":"Comma",
+  ".":"Period", "/":"Slash", ":":"Colon", ";":"Semicolon", "=":"New section",
+  "?":"Question mark", "@":"At sign", "_":"Underscore", "-":"Hyphen"
+};
+
+// Display order for the reference table: letters, digits, then punctuation.
+const CHAR_ORDER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!\"$&()+,./:;=?@_-".split('');
+
+// Display order and descriptions for the prosign rows, shown separately
+// at the end of the reference table since they aren't single characters.
+const PROSIGN_ORDER = ["<BT>", "<AR>", "<KN>", "<AS>", "<SK>", "<KA>", "<VE>", "<HH>"];
+const PROSIGN_NAMES = {
+  "<BT>": "Break (new paragraph / separator)",
+  "<AR>": "End of message",
+  "<KN>": "Invite named station only",
+  "<AS>": "Wait",
+  "<SK>": "End of contact",
+  "<KA>": "Attention / starting signal",
+  "<VE>": "Understood",
+  "<HH>": "Error / correction"
+};
+
+// Reverse lookup built from MORSE itself, so the reference table always
+// matches whatever characters the decoder actually supports.
+const CHAR_TO_CODE = {};
+for (const code in MORSE) {
+  CHAR_TO_CODE[MORSE[code]] = code;
+}
+
+// Spells out a code as "di"/"dah" syllables, with the final dot read as
+// "dit" (e.g. ".-" -> "di-dah", "..-" -> "di-di-dah", "." -> "dit").
+function buildMnemonic(code) {
+  return code.split('').map((symbol, i) => {
+    if (symbol === '-') return 'dah';
+    return i === code.length - 1 ? 'dit' : 'di';
+  }).join('-');
+}
+
+function renderReferenceTable() {
+  const tbody = document.getElementById('refTableBody');
+  const rows = CHAR_ORDER
+    .filter(ch => CHAR_TO_CODE[ch])
+    .map(ch => {
+      const code = CHAR_TO_CODE[ch];
+      const displayCode = code.replace(/\./g, '·').replace(/-/g, '–');
+      const phonetic = PHONETIC[ch] || SYMBOL_NAMES[ch] || '';
+      return `<tr><td class="refChar">${ch}</td><td>${displayCode}</td>` +
+             `<td>${buildMnemonic(code)}</td><td class="refPhonetic">${phonetic}</td></tr>`;
+    });
+
+  const prosignRows = PROSIGN_ORDER
+    .filter(label => CHAR_TO_CODE[label])
+    .map(label => {
+      const code = CHAR_TO_CODE[label];
+      const displayCode = code.replace(/\./g, '·').replace(/-/g, '–');
+      return `<tr><td class="refChar" style="color:#00e5ff;">${label}</td><td>${displayCode}</td>` +
+             `<td>${buildMnemonic(code)}</td><td class="refPhonetic">${PROSIGN_NAMES[label] || ''}</td></tr>`;
+    });
+
+  tbody.innerHTML = rows.join('') + prosignRows.join('');
+}
+
+document.getElementById('refBtn').addEventListener('click', () => {
+  document.getElementById('refOverlay').style.display = 'block';
+});
+
+// ---------- CW Accuracy mode ----------
+// Generates a random character sequence and scores how closely the
+// operator's key timing, in straight-key mode, matches the ideal
+// timing for the current WPM. Each character gets its own bar, made of
+// one block per dot/dash/gap that composes it, so a short letter like
+// E gets a short bar and a longer one gets a taller bar — no fixed
+// height shared across all characters. Each block fills from the
+// bottom as its element/gap is timed; the last 10% of a block is an
+// overflow zone that turns red if the operator holds past the ideal
+// stop point, instead of a hard marker line. This only reads from
+// pressStraight/releaseStraight (via accOnPress/accOnRelease) and
+// keeps its own state entirely separate from the free-practice
+// decoder above.
+
+const SEG_PX_PER_UNIT = 14;       // pixel height per Morse "unit" of duration
+const SEG_OVERFLOW_FRACTION = 0.1; // top 10% of each block is the overflow/red zone
+
+let accuracyActive = false;
+let accWordsData = [];        // array of words, each an array of characters
+let accFlatChars = [];        // flat sequence: {char, code, idealMs, lastInWord, lastOverall}
+let accColumns = [];          // DOM refs per entry in accFlatChars: {charEl, scoreEl, segEls}
+
+let accCharIndex = 0;
+let accElementIndexInChar = 0;
+let accTypedPattern = "";
+let accErrorThisChar = false;
+let accCurrentCharRatios = []; // per-element/intra-gap deviation ratios for the character in progress
+
+let accAwaitingGap = false;
+let accPendingGapType = null;     // 'intra' | 'letter' | 'word'
+let accPendingGapTargetMs = 0;
+let accPendingGapSegIndex = null; // index into the current column's segEls, only set for 'intra' gaps
+
+let accCharsPerWord = 5;
+let accWordCount = 5;
+let accTolElements = 30;  // percent
+let accTolSpaces = 30;    // percent
+let accStrict = false;
+let accDrillType = 'sequence'; // 'sequence' | 'dots' | 'dashes' | 'mix'
+
+let accScore = null;
+
+function accResetScore() {
+  accScore = {
+    chars: { correct: 0, total: 0 },
+    dit: { correct: 0, total: 0 },
+    dah: { correct: 0, total: 0 },
+    intraGap: { correct: 0, total: 0 },
+    letterGap: { correct: 0, total: 0 },
+    wordGap: { correct: 0, total: 0 }
+  };
+}
+
+// Rates a duration against its ideal target: within the tolerance is
+// 'good', within double the tolerance is 'warn', anything further is 'bad'.
+function accDiffRatio(actualMs, targetMs) {
+  return Math.abs(actualMs - targetMs) / targetMs;
+}
+function accClassify(actualMs, targetMs, tolerancePercent) {
+  const diffRatio = accDiffRatio(actualMs, targetMs);
+  const tol = tolerancePercent / 100;
+  if (diffRatio <= tol) return 'good';
+  if (diffRatio <= tol * 2) return 'warn';
+  return 'bad';
+}
+
+// Converts an average timing-deviation ratio into a 0-9 "cadence" score,
+// independent of the tolerance sliders (those only drive the good/warn/
+// bad bar coloring) -- this is meant as an absolute, at-a-glance measure
+// so the operator can compare characters against each other on the fly.
+const ACC_SCORE_THRESHOLDS = [0.05, 0.10, 0.15, 0.20, 0.30, 0.40, 0.55, 0.75, 1.00];
+function accRatioToScore(avgRatio) {
+  for (let s = 0; s < ACC_SCORE_THRESHOLDS.length; s++) {
+    if (avgRatio <= ACC_SCORE_THRESHOLDS[s]) return 9 - s;
+  }
+  return 0;
+}
+function accScoreClass(score) {
+  if (score >= 7) return 's-good';
+  if (score >= 4) return 's-warn';
+  return 's-bad';
+}
+
+// Ideal total time to key a character: each element's duration plus a
+// 1-unit gap between consecutive elements of the same character.
+function accCharIdealMs(code) {
+  let total = 0;
+  for (let i = 0; i < code.length; i++) {
+    total += code[i] === '-' ? unit * 3 : unit;
+    if (i < code.length - 1) total += unit;
+  }
+  return total;
+}
+
+// Word banks for the Q-codes and Abbreviations drills: each entry is
+// spelled out letter by letter (with normal letter/word gap scoring),
+// exactly like the sequence drill, just drawn from a fixed list instead
+// of random characters.
+const Q_CODES = ["QTH","QRM","QRN","QSL","QRZ","QRP","QRO","QSB","QRT","QSY","QRV","QRQ","QRS","QRK","QSA","QRX","QRU"];
+const ABBREVIATIONS = ["73","88","RST","CQ","DE","FB","OM","YL","RIG","ANT","TU","HW","UR","ES","TNX","GM","GA","GE","GN","WX","HR","AGN","PSE","WKD"];
+
+// Builds accWordsData as an array of "words", each an array of
+// {label, code} entries. In sequence mode, each entry is a real
+// character. In the Q-codes/Abbreviations drills, each "word" is one
+// fixed bank entry spelled out letter by letter. In a raw-element drill
+// (dots/dashes/mix), each "word" holds a single synthetic entry: a run
+// of raw elements with no real character behind it, so the natural gap
+// after it always scores as a word gap -- the same rest that would
+// follow any real word.
+function accBuildSequence() {
+  accWordsData = [];
+
+  if (accDrillType === 'sequence') {
+    const pool = [];
+    if (document.getElementById('accUseLetters').checked) pool.push(...CHAR_ORDER.slice(0, 26));
+    if (document.getElementById('accUseNumbers').checked) pool.push(...CHAR_ORDER.slice(26, 36));
+    if (document.getElementById('accUsePunct').checked) pool.push(...CHAR_ORDER.slice(36));
+    const usablePool = pool.filter(ch => CHAR_TO_CODE[ch]);
+    const finalPool = usablePool.length ? usablePool : CHAR_ORDER.slice(0, 26);
+
+    for (let w = 0; w < accWordCount; w++) {
+      const len = 1 + Math.floor(Math.random() * accCharsPerWord);
+      const word = [];
+      for (let i = 0; i < len; i++) {
+        const ch = finalPool[Math.floor(Math.random() * finalPool.length)];
+        word.push({ label: ch, code: CHAR_TO_CODE[ch] });
+      }
+      accWordsData.push(word);
+    }
+  } else if (accDrillType === 'qcodes' || accDrillType === 'abbrev') {
+    const bank = accDrillType === 'qcodes' ? Q_CODES : ABBREVIATIONS;
+    for (let w = 0; w < accWordCount; w++) {
+      const entryStr = bank[Math.floor(Math.random() * bank.length)];
+      const word = entryStr.split('').filter(ch => CHAR_TO_CODE[ch])
+        .map(ch => ({ label: ch, code: CHAR_TO_CODE[ch] }));
+      if (word.length) accWordsData.push(word);
+    }
+  } else {
+    for (let g = 0; g < accWordCount; g++) {
+      const len = 1 + Math.floor(Math.random() * accCharsPerWord);
+      let code = '';
+      for (let i = 0; i < len; i++) {
+        if (accDrillType === 'dots') code += '.';
+        else if (accDrillType === 'dashes') code += '-';
+        else code += Math.random() < 0.5 ? '.' : '-';
+      }
+      accWordsData.push([{ label: code, code: code }]);
+    }
+  }
+
+  accFlatChars = [];
+  accWordsData.forEach((word, wi) => {
+    word.forEach((entry, ci) => {
+      accFlatChars.push({
+        label: entry.label,
+        code: entry.code,
+        idealMs: accCharIdealMs(entry.code),
+        lastInWord: ci === word.length - 1,
+        lastOverall: wi === accWordsData.length - 1 && ci === word.length - 1
+      });
+    });
+  });
+}
+
+// Splits a character's code into an ordered list of blocks: one per
+// dot/dash element, plus one thin block for each intra-character gap
+// between them. Each block's pixel height is proportional to its ideal
+// duration in Morse "units" (dash=3, dot/gap=1), so the whole bar's
+// height reflects how long the character actually is -- a lone E is a
+// short bar, a longer letter or a Q-code is a taller one.
+function accBuildSegments(code) {
+  const segs = [];
+  for (let i = 0; i < code.length; i++) {
+    const isDash = code[i] === '-';
+    segs.push({ type: 'el', isDash, targetMs: isDash ? unit * 3 : unit, units: isDash ? 3 : 1 });
+    if (i < code.length - 1) {
+      segs.push({ type: 'gap', targetMs: unit, units: 1 });
+    }
+  }
+  return segs;
+}
+
+// Pixel height for one block: its ideal duration, plus a reserved 10%
+// on top for the overflow/red zone (see accSetSegFill).
+function accSegHeightPx(units) {
+  return Math.round((units / (1 - SEG_OVERFLOW_FRACTION)) * SEG_PX_PER_UNIT);
+}
+
+// Builds one column (character/pattern label, its segmented bar, and
+// its 0-9 score) per entry in accFlatChars, laid out left to right and
+// grouped into words.
+function accRenderTargetSequence() {
+  const container = document.getElementById('accSeqRow');
+  container.innerHTML = '';
+  accColumns = [];
+
+  accWordsData.forEach(word => {
+    const wordEl = document.createElement('div');
+    wordEl.className = 'accWord';
+
+    word.forEach(entry => {
+      const col = document.createElement('div');
+      col.className = 'accCol';
+
+      const charEl = document.createElement('div');
+      charEl.className = 'accChar';
+      charEl.textContent = entry.label;
+
+      const barEl = document.createElement('div');
+      barEl.className = 'accBar';
+
+      const segEls = accBuildSegments(entry.code).map(seg => {
+        const segEl = document.createElement('div');
+        segEl.className = 'accSeg ' + (seg.type === 'gap' ? 'accSegGap' : (seg.isDash ? 'accSegDash' : 'accSegDot'));
+        segEl.style.height = accSegHeightPx(seg.units) + 'px';
+
+        const normalDiv = document.createElement('div');
+        normalDiv.className = 'accSegFillNormal';
+        const overflowDiv = document.createElement('div');
+        overflowDiv.className = 'accSegFillOverflow';
+        segEl.appendChild(normalDiv);
+        segEl.appendChild(overflowDiv);
+        barEl.appendChild(segEl);
+
+        return { normalDiv, overflowDiv };
+      });
+
+      const scoreEl = document.createElement('div');
+      scoreEl.className = 'accScoreNum';
+      scoreEl.textContent = '\u00A0';
+
+      col.appendChild(charEl);
+      col.appendChild(barEl);
+      col.appendChild(scoreEl);
+      wordEl.appendChild(col);
+
+      accColumns.push({ charEl, scoreEl, segEls });
+    });
+
+    container.appendChild(wordEl);
+  });
+
+  if (accColumns.length) accColumns[0].charEl.classList.add('active');
+}
+
+function accUpdateProgressLabel() {
+  document.getElementById('accProgressLabel').textContent =
+    `${accScore.chars.correct} / ${accScore.chars.total}`;
+}
+
+// Fills one block (element or gap) based on the real duration versus
+// its ideal target: 0-90% of the block's height is the "on time" zone,
+// colored by the same good/warn/bad tiers used elsewhere; the last 10%
+// is a fixed overflow zone that only fills — in red — if the operator
+// held past the ideal stop point. Going further doesn't grow the bar
+// any taller, it just fills that red cap completely, so a bar's height
+// stays meaningful (proportional to the character) regardless of how
+// badly a single element was mistimed.
+function accSetSegFill(seg, actualMs, targetMs, result) {
+  const scaleMs = targetMs / (1 - SEG_OVERFLOW_FRACTION);
+  const pct = Math.min(100, (actualMs / scaleMs) * 100);
+  const normalPct = Math.min(pct, 100 * (1 - SEG_OVERFLOW_FRACTION));
+  const overflowPct = Math.max(0, pct - 100 * (1 - SEG_OVERFLOW_FRACTION));
+
+  seg.normalDiv.style.height = normalPct + '%';
+  seg.normalDiv.classList.remove('warn', 'bad');
+  if (result === 'warn' || result === 'bad') seg.normalDiv.classList.add(result);
+  seg.overflowDiv.style.height = overflowPct + '%';
+}
+
+// The element (dot/dash) the operator is expected to send next, read
+// from the character and position the sequence is currently at.
+function accExpectedElementTarget() {
+  const item = accFlatChars[accCharIndex];
+  const symbol = item.code[accElementIndexInChar];
+  return symbol === '-' ? unit * 3 : unit;
+}
+
+function accOnPress() {
+  if (accAwaitingGap) {
+    const gapMs = straightPressStart - lastElementEnd;
+    const result = accClassify(gapMs, accPendingGapTargetMs, accTolSpaces);
+    const bucket = accPendingGapType === 'word' ? accScore.wordGap
+                 : accPendingGapType === 'letter' ? accScore.letterGap
+                 : accScore.intraGap;
+    bucket.total++;
+    if (result === 'good') bucket.correct++;
+    // Only an intra-character gap counts toward this character's own
+    // cadence score and its own bar segment; letter/word gaps are
+    // scored separately and belong to the rest between characters.
+    if (accPendingGapType === 'intra' && accPendingGapSegIndex !== null) {
+      accCurrentCharRatios.push(accDiffRatio(gapMs, accPendingGapTargetMs));
+      accSetSegFill(accColumns[accCharIndex].segEls[accPendingGapSegIndex], gapMs, accPendingGapTargetMs, result);
+    }
+    accAwaitingGap = false;
+    accPendingGapSegIndex = null;
+  }
+
+  // Starting a new character: clear its bar's segments and score back
+  // to empty before the first element comes in.
+  if (accElementIndexInChar === 0) {
+    const col = accColumns[accCharIndex];
+    accCurrentCharRatios = [];
+    col.segEls.forEach(seg => {
+      seg.normalDiv.style.height = '0%';
+      seg.normalDiv.classList.remove('warn', 'bad');
+      seg.overflowDiv.style.height = '0%';
+    });
+    col.scoreEl.textContent = '\u00A0';
+    col.scoreEl.className = 'accScoreNum';
+  }
+}
+
+function accOnRelease(heldMs, elementChar) {
+  const targetMs = accExpectedElementTarget();
+  const result = accClassify(heldMs, targetMs, accTolElements);
+  const bucket = elementChar === '-' ? accScore.dah : accScore.dit;
+  bucket.total++;
+  if (result === 'good') bucket.correct++;
+  accCurrentCharRatios.push(accDiffRatio(heldMs, targetMs));
+
+  const elSegIndex = accElementIndexInChar * 2;
+  const col = accColumns[accCharIndex];
+  accSetSegFill(col.segEls[elSegIndex], heldMs, targetMs, result);
+
+  accTypedPattern += elementChar;
+  const item = accFlatChars[accCharIndex];
+  if (!item.code.startsWith(accTypedPattern)) accErrorThisChar = true;
+  accElementIndexInChar++;
+
+  if (accElementIndexInChar < item.code.length) {
+    // More elements remain in this character: remember which segment
+    // is the intra-gap that follows, so the next press can score and
+    // color it once its real duration is known.
+    accPendingGapType = 'intra';
+    accPendingGapTargetMs = unit;
+    accPendingGapSegIndex = elSegIndex + 1;
+    accAwaitingGap = true;
+    return;
+  }
+
+  // Character complete: score it, then either stop (strict mode) or
+  // move on to the next character/word.
+  const charOk = !accErrorThisChar && accTypedPattern === item.code;
+  col.charEl.classList.remove('active');
+  col.charEl.classList.add(charOk ? 'good' : 'bad');
+
+  // Cadence score 0-9: a wrong character (mis-keyed pattern) scores 0
+  // outright, since that's a bigger problem than timing; otherwise it's
+  // derived from how far off, on average, every element/intra-gap in
+  // this character ran versus its ideal duration.
+  const avgRatio = accCurrentCharRatios.length
+    ? accCurrentCharRatios.reduce((a, b) => a + b, 0) / accCurrentCharRatios.length
+    : 0;
+  const charScore = charOk ? accRatioToScore(avgRatio) : 0;
+  col.scoreEl.textContent = String(charScore);
+  col.scoreEl.className = 'accScoreNum ' + accScoreClass(charScore);
+
+  accScore.chars.total++;
+  if (charOk) accScore.chars.correct++;
+  accUpdateProgressLabel();
+
+  if (accStrict && !charOk) {
+    accFinish(true);
+    return;
+  }
+
+  const finishedItem = item;
+  accTypedPattern = "";
+  accElementIndexInChar = 0;
+  accErrorThisChar = false;
+  accCharIndex++;
+
+  if (accCharIndex >= accFlatChars.length) {
+    accFinish(false);
+    return;
+  }
+
+  accColumns[accCharIndex].charEl.classList.add('active');
+  accPendingGapType = finishedItem.lastInWord ? 'word' : 'letter';
+  accPendingGapTargetMs = finishedItem.lastInWord ? unit * 7 : unit * 3;
+  accAwaitingGap = true;
+}
+
+// Clears the (hidden, behind the accuracy overlays) free-decode state,
+// so returning to the main screen afterward doesn't show leftover text.
+function accClearFreeDecodeState() {
+  outputEl.innerHTML = '';
+  outputEl.classList.remove('building');
+  currentPattern = '';
+  textBuffer = '';
+  wordLineEl.innerHTML = '';
+  resetGapTimers();
+}
+
+function accStart(reuseSequence) {
+  if (!reuseSequence) {
+    accCharsPerWord = parseInt(document.getElementById('accCharsLabel').textContent, 10);
+    accWordCount = parseInt(document.getElementById('accWordsLabel').textContent, 10);
+    accTolElements = parseInt(document.getElementById('accTolElLabel').textContent, 10);
+    accTolSpaces = parseInt(document.getElementById('accTolSpLabel').textContent, 10);
+    accBuildSequence();
+  }
+
+  setMode('straight');
+  accRenderTargetSequence();
+  accResetScore();
+  accCharIndex = 0;
+  accElementIndexInChar = 0;
+  accTypedPattern = "";
+  accErrorThisChar = false;
+  accAwaitingGap = false;
+  accUpdateProgressLabel();
+
+  document.getElementById('accSetupOverlay').style.display = 'none';
+  document.getElementById('accPracticeOverlay').style.display = 'block';
+  accuracyActive = true;
+}
+
+function accFinish(aborted) {
+  accuracyActive = false;
+  accClearFreeDecodeState();
+  document.getElementById('accPracticeOverlay').style.display = 'none';
+  accRenderResults(aborted);
+  accRecordHistoryEntry(aborted);
+  document.getElementById('accResultsOverlay').style.display = 'block';
+}
+
+function accPercent(bucket) {
+  return bucket.total ? Math.round((bucket.correct / bucket.total) * 100) : null;
+}
+
+function accFormatRow(label, bucket) {
+  const pct = accPercent(bucket);
+  return `<p>${label}: ${pct === null ? '—' : pct + '% (' + bucket.correct + '/' + bucket.total + ')'}</p>`;
+}
+
+function accRenderResults(aborted) {
+  const body = document.getElementById('accResultsBody');
+  const spellsLetters = accDrillType === 'sequence' || accDrillType === 'qcodes' || accDrillType === 'abbrev';
+  let html = '';
+  if (aborted) {
+    html += `<p style="color:#b400e0;">Stopped after a mistake (strict mode).</p>`;
+  }
+  html += accFormatRow(spellsLetters ? 'Characters' : 'Groups', accScore.chars);
+  html += accFormatRow('Dits', accScore.dit);
+  html += accFormatRow('Dahs', accScore.dah);
+  html += accFormatRow('Intra-element spacing', accScore.intraGap);
+  if (spellsLetters) html += accFormatRow('Letter spacing', accScore.letterGap);
+  html += accFormatRow(spellsLetters ? 'Word spacing' : 'Between-group spacing', accScore.wordGap);
+  body.innerHTML = html;
+}
+
+// ---------- ACC history (local, persisted via localStorage) ----------
+// Keeps the last 20 session summaries so a trend (e.g. "my dahs run
+// long" or "word spacing keeps drifting") can be spotted across an
+// afternoon's practice, even across page reloads. This is separate
+// from the settings key so clearing one doesn't affect the other.
+const ACC_HISTORY_KEY = 'cwTrainerAccHistory';
+const ACC_HISTORY_MAX = 20;
+let accHistory = [];
+let lastAccSummary = null;
+
+function loadAccHistory() {
+  try {
+    const raw = localStorage.getItem(ACC_HISTORY_KEY);
+    accHistory = raw ? JSON.parse(raw) : [];
+  } catch (err) {
+    accHistory = [];
+  }
+}
+
+function saveAccHistory() {
+  try {
+    localStorage.setItem(ACC_HISTORY_KEY, JSON.stringify(accHistory.slice(-ACC_HISTORY_MAX)));
+  } catch (err) {
+    // Storage can fail (private browsing, quota); history just won't
+    // persist across a reload, but the current session is unaffected.
+  }
+}
+
+function accRecordHistoryEntry(aborted) {
+  lastAccSummary = {
+    ts: new Date().toISOString(),
+    drill: accDrillType,
+    wpm,
+    aborted,
+    chars: accPercent(accScore.chars),
+    dit: accPercent(accScore.dit),
+    dah: accPercent(accScore.dah),
+    intra: accPercent(accScore.intraGap),
+    letter: accPercent(accScore.letterGap),
+    word: accPercent(accScore.wordGap)
+  };
+  accHistory.push(lastAccSummary);
+  if (accHistory.length > ACC_HISTORY_MAX) accHistory.shift();
+  saveAccHistory();
+}
+
+function accFormatPct(v) {
+  return v === null ? '—' : v + '%';
+}
+
+function accSummaryToText(s) {
+  const when = new Date(s.ts).toLocaleString();
+  return `${when} | ${s.drill.toUpperCase()} @ ${s.wpm} WPM${s.aborted ? ' (stopped early)' : ''}\n` +
+    `  Chars ${accFormatPct(s.chars)}  Dits ${accFormatPct(s.dit)}  Dahs ${accFormatPct(s.dah)}\n` +
+    `  Intra ${accFormatPct(s.intra)}  Letter ${accFormatPct(s.letter)}  Word ${accFormatPct(s.word)}`;
+}
+
+function accRenderHistoryView() {
+  const el = document.getElementById('accHistoryBody');
+  if (!accHistory.length) {
+    el.innerHTML = '<p>No previous sessions yet this session/device.</p>';
+    return;
+  }
+  el.innerHTML = accHistory.slice().reverse().map(s => {
+    const when = new Date(s.ts).toLocaleString();
+    return `<div class="histRow"><b>${when}</b> — ${s.drill.toUpperCase()} @ ${s.wpm} WPM${s.aborted ? ' <span style="color:#b400e0;">(stopped)</span>' : ''}<br>` +
+      `Chars ${accFormatPct(s.chars)} · Dits ${accFormatPct(s.dit)} · Dahs ${accFormatPct(s.dah)} · ` +
+      `Intra ${accFormatPct(s.intra)} · Letter ${accFormatPct(s.letter)} · Word ${accFormatPct(s.word)}</div>`;
+  }).join('');
+}
+
+// ---------- Accuracy setup UI wiring ----------
+function accStepper(labelId, delta, min, max, suffix) {
+  const el = document.getElementById(labelId);
+  const next = Math.min(max, Math.max(min, parseInt(el.textContent, 10) + delta));
+  el.textContent = next + (suffix || '');
+}
+
+document.getElementById('accBtn').addEventListener('click', () => {
+  document.getElementById('accWpmLabel').textContent = wpm + ' WPM';
+  document.getElementById('accSetupOverlay').style.display = 'block';
+});
+
+document.getElementById('accWpmUp').addEventListener('click', () => {
+  wpm = Math.min(wpm + 1, 60);
+  updateUnit();
+  document.getElementById('accWpmLabel').textContent = wpm + ' WPM';
+  saveSettings();
+});
+document.getElementById('accWpmDown').addEventListener('click', () => {
+  wpm = Math.max(wpm - 1, 5);
+  updateUnit();
+  document.getElementById('accWpmLabel').textContent = wpm + ' WPM';
+  saveSettings();
+});
+
+document.getElementById('accCharsUp').addEventListener('click', () => { accStepper('accCharsLabel', 1, 1, 25); accCharsPerWord = parseInt(document.getElementById('accCharsLabel').textContent, 10); saveSettings(); });
+document.getElementById('accCharsDown').addEventListener('click', () => { accStepper('accCharsLabel', -1, 1, 25); accCharsPerWord = parseInt(document.getElementById('accCharsLabel').textContent, 10); saveSettings(); });
+document.getElementById('accWordsUp').addEventListener('click', () => { accStepper('accWordsLabel', 1, 1, 25); accWordCount = parseInt(document.getElementById('accWordsLabel').textContent, 10); saveSettings(); });
+document.getElementById('accWordsDown').addEventListener('click', () => { accStepper('accWordsLabel', -1, 1, 25); accWordCount = parseInt(document.getElementById('accWordsLabel').textContent, 10); saveSettings(); });
+document.getElementById('accTolElUp').addEventListener('click', () => { accStepper('accTolElLabel', 5, 5, 90, '%'); accTolElements = parseInt(document.getElementById('accTolElLabel').textContent, 10); saveSettings(); });
+document.getElementById('accTolElDown').addEventListener('click', () => { accStepper('accTolElLabel', -5, 5, 90, '%'); accTolElements = parseInt(document.getElementById('accTolElLabel').textContent, 10); saveSettings(); });
+document.getElementById('accTolSpUp').addEventListener('click', () => { accStepper('accTolSpLabel', 5, 5, 90, '%'); accTolSpaces = parseInt(document.getElementById('accTolSpLabel').textContent, 10); saveSettings(); });
+document.getElementById('accTolSpDown').addEventListener('click', () => { accStepper('accTolSpLabel', -5, 5, 90, '%'); accTolSpaces = parseInt(document.getElementById('accTolSpLabel').textContent, 10); saveSettings(); });
+
+document.querySelectorAll('.drillTypeBtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.drillTypeBtn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    accDrillType = btn.dataset.drill;
+    accUpdateDrillUi();
+    saveSettings();
+  });
+});
+
+document.getElementById('accStrictBtn').addEventListener('click', () => {
+  accStrict = !accStrict;
+  document.getElementById('accStrictBtn').textContent = accStrict ? 'STRICT' : 'LENIENT';
+  saveSettings();
+});
+
+document.getElementById('accUseLetters').addEventListener('change', saveSettings);
+document.getElementById('accUseNumbers').addEventListener('change', saveSettings);
+document.getElementById('accUsePunct').addEventListener('change', saveSettings);
+
+document.getElementById('accStartBtn').addEventListener('click', () => accStart(false));
+
+document.getElementById('accStopBtn').addEventListener('click', () => {
+  accuracyActive = false;
+  accClearFreeDecodeState();
+  document.getElementById('accPracticeOverlay').style.display = 'none';
+});
+
+document.getElementById('accRepeatBtn').addEventListener('click', () => {
+  document.getElementById('accResultsOverlay').style.display = 'none';
+  document.getElementById('accHistoryBody').style.display = 'none';
+  accStart(true);
+});
+document.getElementById('accNewBtn').addEventListener('click', () => {
+  document.getElementById('accResultsOverlay').style.display = 'none';
+  document.getElementById('accHistoryBody').style.display = 'none';
+  accStart(false);
+});
+
+document.getElementById('accCopyBtn').addEventListener('click', async () => {
+  if (!lastAccSummary) return;
+  const text = accSummaryToText(lastAccSummary);
+  const btn = document.getElementById('accCopyBtn');
+  try {
+    await navigator.clipboard.writeText(text);
+    const original = btn.textContent;
+    btn.textContent = 'COPIED';
+    setTimeout(() => { btn.textContent = original; }, 1200);
+  } catch (err) {
+    // Clipboard permission can be denied; the operator can still read
+    // and copy the numbers directly from the results screen.
+  }
+});
+
+document.getElementById('accHistBtn').addEventListener('click', () => {
+  const el = document.getElementById('accHistoryBody');
+  const showing = el.style.display === 'block';
+  if (!showing) accRenderHistoryView();
+  el.style.display = showing ? 'none' : 'block';
+});
+
+renderReferenceTable();
+loadSettings();
+loadAccHistory();
+updateUnit();
+
+// ---------- Service Worker (offline support) ----------
+// Registered last and wrapped in a feature check + try/catch so that
+// browsers without SW support (or a failed registration) never block
+// the trainer itself from working online.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {
+      // Offline caching just won't be available; the app still works
+      // normally over a live connection.
+    });
+  });
+}
+
+</script>
+</body>
+</html>
