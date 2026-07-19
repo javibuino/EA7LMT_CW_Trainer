@@ -390,18 +390,21 @@
   <p style="color:#888; font-size:14px;">Inspired by the original CW Trainer by <b style="color:#b400e0;">EA4JAH</b> (Morffe) — thanks for the idea, my friend. 73.</p>
 
   <p><b style="color:#b400e0;">IAMBIC B mode</b></p>
-  <p><b>X</b> = dit &nbsp;|&nbsp; <b>Z</b> = dah</p>
-  <p>Hold down each key to send repeated elements. If you press both at once (squeeze), the keyer alternates dit/dah automatically, just like a real electronic keyer in Iambic B mode: if both keys are released while an element is being sent, one extra alternated element is completed before stopping. Each element's duration is set by the keyer according to the WPM setting.</p>
+  <p><b>X</b> / <b>Left Ctrl</b> = dit &nbsp;|&nbsp; <b>Z</b> / <b>Right Ctrl</b> = dah (vBand-compatible)</p>
+  <p>Hold down each key to send repeated elements. Squeeze both for automatic dit/dah alternation, Iambic B style.</p>
 
   <p><b style="color:#b400e0;">VERTICAL mode (straight key)</b></p>
-  <p><b>X</b> or <b>space</b> = the key. There's no electronic keyer here: you control each element's duration by holding the key down. A short tap is decoded as a dot and a long one as a dash, using the dit duration at the configured WPM as the reference (any press longer than twice that duration is read as a dash). This mode trains your own hand timing, just like a real straight key.</p>
+  <p><b>X</b> / <b>Left Ctrl</b> / space = the key. You control each element's duration by holding it down; a short tap is a dot, a long one a dash.</p>
 
-  <p>Speed is measured in <b>WPM</b> (words per minute, PARIS standard). In iambic mode it controls each element's duration; in vertical mode it's only used as a reference to decode your keystrokes.</p>
-  <p><b style="color:#b400e0;">Purple</b>: the box at the top shows, in purple, the pattern (dots/dashes) of the letter you're keying right now, not yet resolved.</p>
-  <p><b style="color:#e8d000;">Yellow</b>: in the text line, letters that have already been decoded and confirmed (after the letter gap).</p>
-  <p><b style="color:#39ff14;">Green</b>: within that line, the most recent letter you just typed, so you can spot it at a glance.</p>
-  <p><b style="color:#00e5ff;">Cyan</b>: a decoded prosign (like &lt;BT&gt; or &lt;SK&gt;) — sent as two letters with no pause between them. See the REF table for the full list.</p>
-  <p>CLR clears the decoded text.</p>
+  <p><b style="color:#b400e0;">Colors</b></p>
+  <p><b style="color:#b400e0;">Purple</b>: letter being keyed right now. <b style="color:#e8d000;">Yellow</b>: decoded letters. <b style="color:#39ff14;">Green</b>: most recent letter. <b style="color:#00e5ff;">Cyan</b>: a decoded prosign (&lt;BT&gt;, &lt;AR&gt;, &lt;SK&gt;...) — sent without pausing between its two letters.</p>
+
+  <p><b style="color:#b400e0;">ACC (accuracy practice)</b></p>
+  <p>Drills: SEQ (random chars), DOTS/DASHES/MIX (raw rhythm), QCODE/ABBR (real ham vocabulary), CUSTOM (type your own words). Runs in Vertical mode. Each bar is built from that character's own dot/dash/gap blocks — the top 10% of each block turns red if you hold past the ideal stop point. The number below is a 0-9 cadence score for that letter.</p>
+
+  <p><b style="color:#b400e0;">Other</b></p>
+  <p>REF shows the Morse table plus prosigns. THEME/LIGHT toggles light/dark. CLR clears the decoded text.</p>
+
   <button class="btn closeBtn" onclick="document.getElementById('helpOverlay').style.display='none'">Close</button>
 </div>
 
